@@ -1,0 +1,13 @@
+c:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\bin\Release\net10.0\MISA.Domain.deps.json
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\bin\Release\net10.0\MISA.Domain.dll
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\bin\Release\net10.0\MISA.Domain.pdb
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\bin\Release\net10.0\MISA.Domain.xml
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\obj\Release\net10.0\MISA.Domain.GeneratedMSBuildEditorConfig.editorconfig
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\obj\Release\net10.0\MISA.Domain.AssemblyInfoInputs.cache
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\obj\Release\net10.0\MISA.Domain.AssemblyInfo.cs
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\obj\Release\net10.0\MISA.Domain.csproj.CoreCompileInputs.cache
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\obj\Release\net10.0\MISA.Domain.dll
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\obj\Release\net10.0\refint\MISA.Domain.dll
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\obj\Release\net10.0\MISA.Domain.xml
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\obj\Release\net10.0\MISA.Domain.pdb
+c:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\obj\Release\net10.0\ref\MISA.Domain.dll

@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AzureFunctionsVersion>V4</AzureFunctionsVersion>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.52.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.OpenTelemetry" Version="1.2.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
+    <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="1.7.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.1.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MISA.Application\MISA.Application.csproj" />
+    <ProjectReference Include="..\MISA.Contracts\MISA.Contracts.csproj" />
+    <ProjectReference Include="..\MISA.Infrastructure\MISA.Infrastructure.csproj" />
+    <ProjectReference Include="..\MISA.Decisioning\MISA.Decisioning.csproj" />
+    <ProjectReference Include="..\MISA.Orchestration.Akka\MISA.Orchestration.Akka.csproj" />
+    <ProjectReference Include="..\MISA.Agents\MISA.Agents.csproj" />
+    <ProjectReference Include="..\MISA.Knowledge\MISA.Knowledge.csproj" />
+    <ProjectReference Include="..\MISA.Observability\MISA.Observability.csproj" />
+  </ItemGroup>
+
+</Project>

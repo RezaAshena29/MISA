@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>MISA.Knowledge</name>
+    </assembly>
+    <members>
+        <member name="T:MISA.Knowledge.KnowledgeService">
+            <summary>
+            Deterministic knowledge service for explanation and grounding responses.
+            </summary>
+        </member>
+        <member name="M:MISA.Knowledge.KnowledgeService.AnswerAsync(MISA.Contracts.ChatRequestDto,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:MISA.Knowledge.KnowledgeServiceCollectionExtensions">
+            <summary>
+            Registers knowledge services.
+            </summary>
+        </member>
+        <member name="M:MISA.Knowledge.KnowledgeServiceCollectionExtensions.AddMisaKnowledge(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>
+            Adds knowledge module services.
+            </summary>
+        </member>
+    </members>
+</doc>

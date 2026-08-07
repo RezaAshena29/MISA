@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "MISA.Functions": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7257",
+      "launchBrowser": false
+    }
+  }
+}

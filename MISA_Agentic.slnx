@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MISA.Agents/MISA.Agents.csproj" />
+    <Project Path="src/MISA.Application/MISA.Application.csproj" />
+    <Project Path="src/MISA.Contracts/MISA.Contracts.csproj" />
+    <Project Path="src/MISA.Decisioning/MISA.Decisioning.csproj" />
+    <Project Path="src/MISA.Domain/MISA.Domain.csproj" />
+    <Project Path="src/MISA.Functions/MISA.Functions.csproj" />
+    <Project Path="src/MISA.Infrastructure/MISA.Infrastructure.csproj" />
+    <Project Path="src/MISA.Knowledge/MISA.Knowledge.csproj" />
+    <Project Path="src/MISA.Observability/MISA.Observability.csproj" />
+    <Project Path="src/MISA.Orchestration.Akka/MISA.Orchestration.Akka.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MISA.ArchitectureTests/MISA.ArchitectureTests.csproj" />
+  </Folder>
+</Solution>

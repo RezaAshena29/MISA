@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>MISA.Orchestration.Akka</name>
+    </assembly>
+    <members>
+        <member name="T:MISA.Orchestration.Akka.AkkaClusterExecutionRuntime">
+            <summary>
+            Akka cluster runtime implementation used by the application pipeline.
+            </summary>
+        </member>
+        <member name="M:MISA.Orchestration.Akka.AkkaClusterExecutionRuntime.#ctor(MISA.Application.IAgentRouter,MISA.Application.IKnowledgeService,MISA.Application.IDecisioningService,MISA.Application.IChatSessionStore,Microsoft.Extensions.Logging.ILogger{MISA.Orchestration.Akka.AkkaClusterExecutionRuntime})">
+            <summary>
+            Creates and starts the cluster actor system.
+            </summary>
+        </member>
+        <member name="M:MISA.Orchestration.Akka.AkkaClusterExecutionRuntime.ExecuteAsync(MISA.Contracts.ChatRequestDto,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:MISA.Orchestration.Akka.AkkaClusterExecutionRuntime.DisposeAsync">
+            <inheritdoc />
+        </member>
+        <member name="T:MISA.Orchestration.Akka.OrchestrationAkkaServiceCollectionExtensions">
+            <summary>
+            Registers Akka orchestration services.
+            </summary>
+        </member>
+        <member name="M:MISA.Orchestration.Akka.OrchestrationAkkaServiceCollectionExtensions.AddMisaOrchestrationAkka(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>
+            Adds Akka-based orchestration runtime.
+            </summary>
+        </member>
+    </members>
+</doc>

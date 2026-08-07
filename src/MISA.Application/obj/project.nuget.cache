@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "Ln9oLZnjegw=",
+  "success": true,
+  "projectFilePath": "C:\\Reza_Repo\\MISA\\MISA_Agentic\\src\\MISA.Application\\MISA.Application.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\ashenre\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\10.0.10\\microsoft.extensions.dependencyinjection.abstractions.10.0.10.nupkg.sha512",
+    "C:\\Users\\ashenre\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\10.0.10\\microsoft.extensions.logging.abstractions.10.0.10.nupkg.sha512"
+  ],
+  "logs": []
+}
