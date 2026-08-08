@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MISA.Observability")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0af292b25ac80285c5d67338a3375335dc983b0d")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+44fb894f1fb88d7fae8e3ea8f8d41d84e5915ec5")]
 [assembly: System.Reflection.AssemblyProductAttribute("MISA.Observability")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MISA.Observability")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

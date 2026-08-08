@@ -114,7 +114,60 @@ public interface IDecisioningService
 	/// Builds recommendation content for the active scenario.
 	/// </summary>
 	Task<string> BuildRecommendationAsync(ChatRequestDto request, CancellationToken cancellationToken);
+
+	/// <summary>
+	/// Builds a structured recommendation table used for rich chat rendering.
+	/// </summary>
+	Task<RecommendationTable> BuildRecommendationTableAsync(ChatRequestDto request, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Scenario constants for recommendation outputs.
+/// </summary>
+public static class RecommendationScenarios
+{
+	public const string MaximizeIrrAtLe = "maximize_irr_at_le";
+	public const string MaximizeEarlyCsv = "maximize_early_cash_surrender_value";
+	public const string MaximizeDeathBenefit = "maximize_death_benefit";
+}
+
+/// <summary>
+/// Structured recommendation table for rich output rendering.
+/// </summary>
+public sealed record RecommendationTable(
+	string ScenarioDescription,
+	string ScenarioType,
+	string ClientSummary,
+	decimal PremiumBudget,
+	IReadOnlyList<RecommendationColumn> Columns);
+
+/// <summary>
+/// One recommendation column with metrics used by markdown and columns payloads.
+/// </summary>
+public sealed record RecommendationColumn(
+	string Id,
+	string Label,
+	decimal BaseCoverageAmount,
+	decimal BaseAnnualPremium,
+	decimal DepositOptionPayment,
+	decimal TotalAnnualOutlay,
+	decimal CashValueYear10,
+	decimal CashValueYear5,
+	decimal CashValueYear20,
+	decimal CvEfficiencyYear10,
+	decimal IrrOnCsvYear10,
+	decimal DeathBenefitAtLeCurrent,
+	decimal IrrAtLeCurrent,
+	decimal DeathBenefitAtLeMinus2,
+	decimal IrrAtLeMinus2,
+	int QuickPayCurrent,
+	int QuickPayMinus2,
+	bool Recommended,
+	int? ExtendedPaymentsForStress,
+	string? StressPaymentExtensionNote,
+	int LifeExpectancyAgeUsed,
+	string Explain,
+	IReadOnlyList<string> Warnings);
 
 /// <summary>
 /// Pipeline implementation coordinating guards and Akka runtime execution.

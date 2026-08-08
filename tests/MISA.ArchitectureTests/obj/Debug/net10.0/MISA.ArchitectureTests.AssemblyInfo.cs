@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MISA.ArchitectureTests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+62b2e6c2e92de4fd46c1a0b0b9c49682de2b3753")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+44fb894f1fb88d7fae8e3ea8f8d41d84e5915ec5")]
 [assembly: System.Reflection.AssemblyProductAttribute("MISA.ArchitectureTests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MISA.ArchitectureTests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

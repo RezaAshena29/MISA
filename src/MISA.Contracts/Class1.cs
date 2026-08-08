@@ -96,7 +96,15 @@ public sealed record ColumnsEventPayload(
 /// </summary>
 public sealed record UdmPatchColumnDto(
 	[property: JsonPropertyName("label")] string Label,
-	[property: JsonPropertyName("operations")] IReadOnlyList<UdmPatchOperationDto> Operations);
+	[property: JsonPropertyName("operations")] IReadOnlyList<UdmPatchOperationDto> Operations,
+	[property: JsonPropertyName("id")] string? Id = null,
+	[property: JsonPropertyName("recommended")] bool Recommended = false,
+	[property: JsonPropertyName("requires_confirmation")] bool RequiresConfirmation = true,
+	[property: JsonPropertyName("explain")] string? Explain = null,
+	[property: JsonPropertyName("warnings")] IReadOnlyList<string>? Warnings = null,
+	[property: JsonPropertyName("irt_udm")] object? IrtUdm = null,
+	[property: JsonPropertyName("irt_calc_response")] object? IrtCalcResponse = null,
+	[property: JsonPropertyName("irt_metrics")] object? IrtMetrics = null);
 
 /// <summary>
 /// DTO for one UDM patch operation.

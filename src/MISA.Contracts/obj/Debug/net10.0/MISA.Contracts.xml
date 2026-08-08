@@ -74,7 +74,7 @@
             DTO for a single recommendation column patch set.
             </summary>
         </member>
-        <member name="M:MISA.Contracts.UdmPatchColumnDto.#ctor(System.String,System.Collections.Generic.IReadOnlyList{MISA.Contracts.UdmPatchOperationDto})">
+        <member name="M:MISA.Contracts.UdmPatchColumnDto.#ctor(System.String,System.Collections.Generic.IReadOnlyList{MISA.Contracts.UdmPatchOperationDto},System.String,System.Boolean,System.Boolean,System.String,System.Collections.Generic.IReadOnlyList{System.String},System.Object,System.Object,System.Object)">
             <summary>
             DTO for a single recommendation column patch set.
             </summary>

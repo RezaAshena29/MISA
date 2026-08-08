@@ -5,6 +5,8 @@ using MISA.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
+using System.Globalization;
+using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -112,7 +114,7 @@ internal sealed record ChatExecutionResult(IReadOnlyList<ChatEventEnvelope> Even
 
 internal sealed class FanOutCoordinatorActor : ReceiveActor
 {
-	private static readonly Regex AgePattern = new(@"\bage\s*\d{1,2}\b|\b\d{1,2}\s*(?:yo|years?|yrs?)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+	private static readonly Regex AgePattern = new(@"\bage\s*\d{1,2}\b|\b\d{1,2}\s*(?:yo|years?|yrs?)\b|\b(?:client|insured|applicant)\s*(?:is|:)\s*\d{1,2}\b|\b\d{1,2}\s*,\s*(?:male|female|man|woman)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 	private static readonly Regex BudgetPattern = new(@"\$\s*\d|\bbudget\b|\bpremium\b|\b\d+k\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 	private static readonly HashSet<string> BudgetFieldNames =
 	[
@@ -251,19 +253,20 @@ internal sealed class FanOutCoordinatorActor : ReceiveActor
 		}
 
 		// Fan-out: compute recommendation and supporting knowledge concurrently.
-		var recommendationTask = _decisioningService.BuildRecommendationAsync(request, cancellationToken);
+		var recommendationTask = _decisioningService.BuildRecommendationTableAsync(request, cancellationToken);
 		var knowledgeTask = _knowledgeService.AnswerAsync(request, cancellationToken);
 		await Task.WhenAll(recommendationTask, knowledgeTask).ConfigureAwait(false);
+		var recommendation = recommendationTask.Result;
 
 		events.Add(ChatEventEnvelope.Text(ChatEventType.Progress, "Received successful results. Comparing and ranking..."));
 
 		events.Add(ChatEventEnvelope.Text(
 			ChatEventType.Result,
-			FormatIllustrationResultMarkdown(recommendationTask.Result, knowledgeTask.Result)));
+			FormatIllustrationResultMarkdown(recommendation, knowledgeTask.Result)));
 
 		if (request.ContextConsent && request.UdmContext is not null)
 		{
-			events.Add(new ChatEventEnvelope(ChatEventType.Columns, BuildColumnsPayload(request)));
+			events.Add(new ChatEventEnvelope(ChatEventType.Columns, BuildColumnsPayload(request, recommendation)));
 		}
 
 		return events;
@@ -478,16 +481,95 @@ internal sealed class FanOutCoordinatorActor : ReceiveActor
 		return string.Join("\n", assumptions);
 	}
 
-	private static string FormatIllustrationResultMarkdown(string recommendation, string knowledge)
+	private static string FormatIllustrationResultMarkdown(RecommendationTable recommendation, string knowledge)
 	{
-		return
-			"Here are the recommended options for your client:\n\n" +
-			"| Rank | Configuration | Recommendation |\n" +
-			"|---|---|---|\n" +
-			$"| 1 | Pay 90 | {EscapeForMarkdownTable(recommendation)} |\n" +
-			"| 2 | Pay 20 | Balanced premium duration comparator |\n" +
-			"| 3 | Pay 10 | Short premium duration comparator |\n\n" +
-			$"Supporting note: {knowledge}";
+		var columns = recommendation.Columns;
+		var lines = new List<string>
+		{
+			$"**{recommendation.ScenarioDescription}**",
+			string.Empty,
+			"| Metric | " + string.Join(" | ", columns.Select(column => EscapeForMarkdownTable(column.Label))) + " |",
+			"| --- | " + string.Join(" | ", columns.Select(_ => "---")) + " |",
+			"| **Base Coverage Amount** | " + string.Join(" | ", columns.Select(column => FormatCurrency(column.BaseCoverageAmount))) + " |",
+			"| **Base Annual Premium** | " + string.Join(" | ", columns.Select(column => FormatCurrency(column.BaseAnnualPremium))) + " |",
+			"| **Deposit Option Payment** | " + string.Join(" | ", columns.Select(column => column.DepositOptionPayment > 0 ? FormatCurrency(column.DepositOptionPayment) : "-")) + " |",
+			"| **Total Annual Outlay** | " + string.Join(" | ", columns.Select(column => FormatCurrency(column.TotalAnnualOutlay))) + " |",
+			"| **Cash Value @ Year 10** | " + string.Join(" | ", columns.Select(column => FormatCurrency(column.CashValueYear10))) + " |"
+		};
+
+		if (columns.Any(column => column.CashValueYear5 > 0))
+		{
+			lines.Add("| **Cash Value @ Year 5** | " + string.Join(" | ", columns.Select(column => FormatCurrency(column.CashValueYear5))) + " |");
+		}
+
+		if (columns.Any(column => column.CashValueYear20 > 0))
+		{
+			lines.Add("| **Cash Value @ Year 20** | " + string.Join(" | ", columns.Select(column => FormatCurrency(column.CashValueYear20))) + " |");
+		}
+
+		if (string.Equals(recommendation.ScenarioType, RecommendationScenarios.MaximizeEarlyCsv, StringComparison.Ordinal))
+		{
+			lines.Add("| **CV Efficiency @ Y10** | " + string.Join(" | ", columns.Select(column => FormatPercent(column.CvEfficiencyYear10, 1))) + " |");
+		}
+
+		lines.Add("| **IRR on CSV @ Year 10** | " + string.Join(" | ", columns.Select(column => FormatPercent(column.IrrOnCsvYear10, 2))) + " |");
+		lines.Add("| **Death Benefit @ LE (Current DIR)** | " + string.Join(" | ", columns.Select(column => $"{FormatCurrency(column.DeathBenefitAtLeCurrent)} (IRR {FormatPercent(column.IrrAtLeCurrent, 2)})")) + " |");
+		lines.Add("| **Death Benefit @ LE (Current -2%)** | " + string.Join(" | ", columns.Select(column => $"{FormatCurrency(column.DeathBenefitAtLeMinus2)} (IRR {FormatPercent(column.IrrAtLeMinus2, 2)})")) + " |");
+		lines.Add("| **Quick Pay @ Current** | " + string.Join(" | ", columns.Select(column => $"{column.QuickPayCurrent} years")) + " |");
+		lines.Add("| **Quick Pay @ Current -2%** | " + string.Join(" | ", columns.Select(column => $"{column.QuickPayMinus2} years")) + " |");
+
+		var budgetWarningRows = columns
+			.Where(column => recommendation.PremiumBudget > 0 && column.TotalAnnualOutlay > recommendation.PremiumBudget * 1.05m)
+			.Select(column =>
+			{
+				var overPct = ((column.TotalAnnualOutlay / recommendation.PremiumBudget) - 1m) * 100m;
+				return $"- **{column.Label}** - total outlay {FormatCurrency(column.TotalAnnualOutlay)}/yr ({overPct:+0;-0;0}% vs budget).";
+			})
+			.ToList();
+
+		var columnWarnings = columns
+			.SelectMany(column => column.Warnings.Select(warning => $"- **{column.Label}** - {EscapeForMarkdownTable(warning)}"))
+			.Distinct(StringComparer.Ordinal)
+			.ToList();
+
+		if (budgetWarningRows.Count > 0 || columnWarnings.Count > 0)
+		{
+			lines.Add(string.Empty);
+			if (budgetWarningRows.Count > 0)
+			{
+				lines.Add($"- **Budget caveat:** stated budget is {FormatCurrency(recommendation.PremiumBudget)}/yr. Over-budget options are shown for comparison.");
+				lines.AddRange(budgetWarningRows);
+			}
+
+			if (columnWarnings.Count > 0)
+			{
+				if (budgetWarningRows.Count > 0)
+				{
+					lines.Add(string.Empty);
+				}
+				lines.AddRange(columnWarnings);
+			}
+		}
+
+		var leValues = columns
+			.Select(column => column.LifeExpectancyAgeUsed)
+			.Distinct()
+			.OrderBy(value => value)
+			.ToArray();
+
+		if (leValues.Length > 0)
+		{
+			lines.Add(string.Empty);
+			lines.Add($"_Life expectancy age used for DB/IRR at LE: {string.Join(", ", leValues)}._");
+		}
+
+		if (!string.IsNullOrWhiteSpace(knowledge))
+		{
+			lines.Add(string.Empty);
+			lines.Add($"Supporting note: {knowledge}");
+		}
+
+		return string.Join("\n", lines);
 	}
 
 	private static string EscapeForMarkdownTable(string value)
@@ -495,25 +577,137 @@ internal sealed class FanOutCoordinatorActor : ReceiveActor
 		return value.Replace("|", "\\|").Replace("\n", " ");
 	}
 
-	private static ColumnsEventPayload BuildColumnsPayload(ChatRequestDto request)
+	private static string FormatCurrency(decimal value)
 	{
-		var operations = new List<UdmPatchOperationDto>
-		{
-			new("replace", "/illustration/scenario/selectedConfig", "Pay 90"),
-			new("replace", "/illustration/scenario/premiumBudget", 100000)
-		};
+		return string.Format(CultureInfo.InvariantCulture, "${0:N0}", value);
+	}
 
-		var columns = new List<UdmPatchColumnDto>
-		{
-			new("Pay 90", operations)
-		};
+	private static string FormatPercent(decimal value, int decimals)
+	{
+		return value.ToString($"N{decimals}", CultureInfo.InvariantCulture) + "%";
+	}
+
+	private static ColumnsEventPayload BuildColumnsPayload(ChatRequestDto request, RecommendationTable recommendation)
+	{
+		var columns = recommendation.Columns
+			.Select(column => new UdmPatchColumnDto(
+				Label: column.Label,
+				Operations: BuildColumnOperations(column, recommendation),
+				Id: column.Id,
+				Recommended: column.Recommended,
+				RequiresConfirmation: true,
+				Explain: column.Explain,
+				Warnings: column.Warnings,
+				IrtUdm: request.UdmContext.HasValue ? request.UdmContext.Value.Clone() : null,
+				IrtCalcResponse: new
+				{
+					configuration = column.Label,
+					scenario_type = recommendation.ScenarioType,
+					generated_by = "MISA_Agentic"
+				},
+				IrtMetrics: new
+				{
+					base_coverage_amount = column.BaseCoverageAmount,
+					annual_premium = column.BaseAnnualPremium,
+					deposit_option_payment = column.DepositOptionPayment,
+					total_annual_outlay = column.TotalAnnualOutlay,
+					cash_value_year_5 = column.CashValueYear5,
+					cash_value_year_10 = column.CashValueYear10,
+					cash_value_year_20 = column.CashValueYear20,
+					cv_efficiency_year_10 = column.CvEfficiencyYear10,
+					irr_on_csv_year_10 = column.IrrOnCsvYear10,
+					death_benefit_at_le_current = column.DeathBenefitAtLeCurrent,
+					irr_at_le_current = column.IrrAtLeCurrent,
+					death_benefit_at_le_minus2 = column.DeathBenefitAtLeMinus2,
+					irr_at_le_minus2 = column.IrrAtLeMinus2,
+					quick_pay_current = column.QuickPayCurrent,
+					quick_pay_minus2 = column.QuickPayMinus2,
+					extended_payments_for_stress = column.ExtendedPaymentsForStress,
+					life_expectancy_age_used = column.LifeExpectancyAgeUsed
+				}))
+			.ToList();
 
 		return new ColumnsEventPayload(
 			Version: "1.0",
 			SessionId: request.SessionId,
 			Columns: columns,
 			IrtUdm: request.UdmContext.HasValue ? request.UdmContext.Value.Clone() : null,
-			IrtCalcResponse: new { status = "stub", generated_by = "MISA_Agentic" },
-			IrtMetrics: new { generated_at_utc = DateTimeOffset.UtcNow });
+			IrtCalcResponse: new
+			{
+				scenario_type = recommendation.ScenarioType,
+				scenario_description = recommendation.ScenarioDescription,
+				column_count = recommendation.Columns.Count,
+				generated_by = "MISA_Agentic"
+			},
+			IrtMetrics: new
+			{
+				client_summary = recommendation.ClientSummary,
+				premium_budget = recommendation.PremiumBudget,
+				generated_at_utc = DateTimeOffset.UtcNow
+			});
+	}
+
+	private static IReadOnlyList<UdmPatchOperationDto> BuildColumnOperations(
+		RecommendationColumn column,
+		RecommendationTable recommendation)
+	{
+		var strategy = ResolveDepositStrategy(column.Label);
+		var operations = new List<UdmPatchOperationDto>
+		{
+			new("replace", "/payments/premiumDuration", ResolvePremiumDuration(column.Label)),
+			new("replace", "/coverage/amount", column.BaseCoverageAmount),
+			new("replace", "/deposits/depositOptionStrategy", strategy),
+			new("replace", "/illustration/scenario/scenarioType", recommendation.ScenarioType),
+			new("replace", "/illustration/scenario/selectedConfig", column.Label),
+			new("replace", "/illustration/scenario/premiumBudget", recommendation.PremiumBudget)
+		};
+
+		if (string.Equals(strategy, "Specified", StringComparison.Ordinal))
+		{
+			operations.Add(new UdmPatchOperationDto("replace", "/deposits/depositOptionPct", 0.25m));
+		}
+
+		if (string.Equals(strategy, "LevelMax", StringComparison.Ordinal))
+		{
+			operations.Add(new UdmPatchOperationDto("replace", "/deposits/depositOptionAmount", column.DepositOptionPayment));
+		}
+
+		return operations;
+	}
+
+	private static string ResolvePremiumDuration(string label)
+	{
+		if (label.Contains("pay 10", StringComparison.OrdinalIgnoreCase))
+		{
+			return "Pay10";
+		}
+
+		if (label.Contains("pay 20", StringComparison.OrdinalIgnoreCase))
+		{
+			return "Pay20";
+		}
+
+		if (label.Contains("pay 100", StringComparison.OrdinalIgnoreCase))
+		{
+			return "Pay100";
+		}
+
+		return "Pay90";
+	}
+
+	private static string ResolveDepositStrategy(string label)
+	{
+		if (label.Contains("25%", StringComparison.OrdinalIgnoreCase))
+		{
+			return "Specified";
+		}
+
+		if (label.Contains("lvl max", StringComparison.OrdinalIgnoreCase)
+			|| label.Contains("level max", StringComparison.OrdinalIgnoreCase))
+		{
+			return "LevelMax";
+		}
+
+		return "None";
 	}
 }

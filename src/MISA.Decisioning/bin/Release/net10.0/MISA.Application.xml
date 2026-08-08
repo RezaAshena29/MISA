@@ -104,6 +104,36 @@
             Builds recommendation content for the active scenario.
             </summary>
         </member>
+        <member name="M:MISA.Application.IDecisioningService.BuildRecommendationTableAsync(MISA.Contracts.ChatRequestDto,System.Threading.CancellationToken)">
+            <summary>
+            Builds a structured recommendation table used for rich chat rendering.
+            </summary>
+        </member>
+        <member name="T:MISA.Application.RecommendationScenarios">
+            <summary>
+            Scenario constants for recommendation outputs.
+            </summary>
+        </member>
+        <member name="T:MISA.Application.RecommendationTable">
+            <summary>
+            Structured recommendation table for rich output rendering.
+            </summary>
+        </member>
+        <member name="M:MISA.Application.RecommendationTable.#ctor(System.String,System.String,System.String,System.Decimal,System.Collections.Generic.IReadOnlyList{MISA.Application.RecommendationColumn})">
+            <summary>
+            Structured recommendation table for rich output rendering.
+            </summary>
+        </member>
+        <member name="T:MISA.Application.RecommendationColumn">
+            <summary>
+            One recommendation column with metrics used by markdown and columns payloads.
+            </summary>
+        </member>
+        <member name="M:MISA.Application.RecommendationColumn.#ctor(System.String,System.String,System.Decimal,System.Decimal,System.Decimal,System.Decimal,System.Decimal,System.Decimal,System.Decimal,System.Decimal,System.Decimal,System.Decimal,System.Decimal,System.Decimal,System.Decimal,System.Int32,System.Int32,System.Boolean,System.Nullable{System.Int32},System.String,System.Int32,System.String,System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>
+            One recommendation column with metrics used by markdown and columns payloads.
+            </summary>
+        </member>
         <member name="T:MISA.Application.ChatPipeline">
             <summary>
             Pipeline implementation coordinating guards and Akka runtime execution.

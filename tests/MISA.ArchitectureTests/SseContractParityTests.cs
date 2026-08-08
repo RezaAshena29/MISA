@@ -193,5 +193,65 @@ public sealed class SseContractParityTests
 		{
 			return Task.FromResult("Recommendation generated for contract parity test.");
 		}
+
+		public Task<RecommendationTable> BuildRecommendationTableAsync(ChatRequestDto request, CancellationToken cancellationToken)
+		{
+			return Task.FromResult(new RecommendationTable(
+				ScenarioDescription: "Maximize IRR at Life Expectancy: M45 NonSmoker, Single Life, $100,000/annual",
+				ScenarioType: RecommendationScenarios.MaximizeIrrAtLe,
+				ClientSummary: "M45 NonSmoker, Single Life",
+				PremiumBudget: 100000m,
+				Columns:
+				[
+					new RecommendationColumn(
+						Id: "pay90-lvlmax",
+						Label: "Pay 90, Lvl Max DO",
+						BaseCoverageAmount: 1150000m,
+						BaseAnnualPremium: 19311m,
+						DepositOptionPayment: 30703m,
+						TotalAnnualOutlay: 50014m,
+						CashValueYear10: 543959m,
+						CashValueYear5: 228332m,
+						CashValueYear20: 1498820m,
+						CvEfficiencyYear10: 108.8m,
+						IrrOnCsvYear10: 7.2m,
+						DeathBenefitAtLeCurrent: 12447867m,
+						IrrAtLeCurrent: 5.92m,
+						DeathBenefitAtLeMinus2: 6948928m,
+						IrrAtLeMinus2: 4.02m,
+						QuickPayCurrent: 5,
+						QuickPayMinus2: 6,
+						Recommended: true,
+						ExtendedPaymentsForStress: 10,
+						StressPaymentExtensionNote: "Stress scale required 10 additional payment years.",
+						LifeExpectancyAgeUsed: 84,
+						Explain: "Apply (recommended)",
+						Warnings: ["Stress scale required 10 additional payment years."]),
+					new RecommendationColumn(
+						Id: "pay20-lvlmax",
+						Label: "Pay 20, Lvl Max DO",
+						BaseCoverageAmount: 910000m,
+						BaseAnnualPremium: 32126m,
+						DepositOptionPayment: 18218m,
+						TotalAnnualOutlay: 50344m,
+						CashValueYear10: 593007m,
+						CashValueYear5: 250120m,
+						CashValueYear20: 1602520m,
+						CvEfficiencyYear10: 117.8m,
+						IrrOnCsvYear10: 8.3m,
+						DeathBenefitAtLeCurrent: 9770800m,
+						IrrAtLeCurrent: 5.74m,
+						DeathBenefitAtLeMinus2: 5126139m,
+						IrrAtLeMinus2: 3.85m,
+						QuickPayCurrent: 7,
+						QuickPayMinus2: 10,
+						Recommended: false,
+						ExtendedPaymentsForStress: 40,
+						StressPaymentExtensionNote: "Stress scale required 40 additional payment years.",
+						LifeExpectancyAgeUsed: 84,
+						Explain: "Apply to scenario",
+						Warnings: ["Stress scale required 40 additional payment years."])
+				]));
+		}
 	}
 }

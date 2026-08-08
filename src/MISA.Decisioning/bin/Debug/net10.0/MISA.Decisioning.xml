@@ -12,6 +12,9 @@
         <member name="M:MISA.Decisioning.RuleBasedDecisioningService.BuildRecommendationAsync(MISA.Contracts.ChatRequestDto,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="M:MISA.Decisioning.RuleBasedDecisioningService.BuildRecommendationTableAsync(MISA.Contracts.ChatRequestDto,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
         <member name="T:MISA.Decisioning.DecisioningServiceCollectionExtensions">
             <summary>
             Registers decisioning services.
