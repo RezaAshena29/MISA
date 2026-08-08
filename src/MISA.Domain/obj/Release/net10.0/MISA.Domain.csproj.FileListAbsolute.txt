@@ -11,3 +11,4 @@ C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\obj\Release\net10.0\refint\MISA.D
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\obj\Release\net10.0\MISA.Domain.xml
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\obj\Release\net10.0\MISA.Domain.pdb
 c:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\obj\Release\net10.0\ref\MISA.Domain.dll
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Domain\obj\Release\net10.0\MISA.Domain.sourcelink.json

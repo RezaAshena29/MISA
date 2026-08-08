@@ -29,3 +29,4 @@ C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Agents.deps.js
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Agents.dll
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Agents.pdb
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Agents.xml
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Agents\obj\Debug\net10.0\MISA.Agents.sourcelink.json

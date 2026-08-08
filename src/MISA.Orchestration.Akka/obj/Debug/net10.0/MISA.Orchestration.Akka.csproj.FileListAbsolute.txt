@@ -29,3 +29,4 @@ C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Orchestration.
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Orchestration.Akka.dll
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Orchestration.Akka.pdb
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Orchestration.Akka.xml
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Orchestration.Akka\obj\Debug\net10.0\MISA.Orchestration.Akka.sourcelink.json

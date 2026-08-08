@@ -15,3 +15,4 @@ C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Contracts.deps
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Contracts.dll
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Contracts.pdb
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Contracts.xml
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Contracts\obj\Debug\net10.0\MISA.Contracts.sourcelink.json

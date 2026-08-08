@@ -19,3 +19,4 @@ C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Application\obj\Release\net10.0\refint\M
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Application\obj\Release\net10.0\MISA.Application.xml
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Application\obj\Release\net10.0\MISA.Application.pdb
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Application\obj\Release\net10.0\ref\MISA.Application.dll
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Application\obj\Release\net10.0\MISA.Application.sourcelink.json

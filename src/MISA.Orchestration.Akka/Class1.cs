@@ -5,6 +5,7 @@ using MISA.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace MISA.Orchestration.Akka;
@@ -113,6 +114,19 @@ internal sealed class FanOutCoordinatorActor : ReceiveActor
 {
 	private static readonly Regex AgePattern = new(@"\bage\s*\d{1,2}\b|\b\d{1,2}\s*(?:yo|years?|yrs?)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 	private static readonly Regex BudgetPattern = new(@"\$\s*\d|\bbudget\b|\bpremium\b|\b\d+k\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+	private static readonly HashSet<string> BudgetFieldNames =
+	[
+		"premiumbudget",
+		"premium_budget",
+		"premiumamount",
+		"premium_amount",
+		"annualpremium",
+		"modalpremium",
+		"depositamount",
+		"deposit_amount",
+		"coverageamount",
+		"coverage_amount"
+	];
 
 	private readonly IAgentRouter _agentRouter;
 	private readonly IKnowledgeService _knowledgeService;
@@ -213,7 +227,7 @@ internal sealed class FanOutCoordinatorActor : ReceiveActor
 				"The user is asking me to help find the best policy for their client. Intention category: **Illustration**.")
 		};
 
-		if (!HasSufficientIllustrationInput(request.Message, out var clarificationPrompt))
+		if (!HasSufficientIllustrationInput(request, out var clarificationPrompt))
 		{
 			events.Add(ChatEventEnvelope.Text(ChatEventType.Clarification, clarificationPrompt));
 			return events;
@@ -269,8 +283,9 @@ internal sealed class FanOutCoordinatorActor : ReceiveActor
 		return $"Previous recommendation:\n{priorState.LastRecommendation}\n\nSupporting explanation:\n{knowledge}";
 	}
 
-	private static bool HasSufficientIllustrationInput(string message, out string clarificationPrompt)
+	private static bool HasSufficientIllustrationInput(ChatRequestDto request, out string clarificationPrompt)
 	{
+		var message = request.Message;
 		var hasAge = AgePattern.IsMatch(message);
 		var hasGender = message.Contains("male", StringComparison.OrdinalIgnoreCase)
 			|| message.Contains("female", StringComparison.OrdinalIgnoreCase)
@@ -282,6 +297,15 @@ internal sealed class FanOutCoordinatorActor : ReceiveActor
 			|| message.Contains("non smoker", StringComparison.OrdinalIgnoreCase);
 		var hasBudget = BudgetPattern.IsMatch(message);
 
+		if (request.UdmContext is { } udmContext)
+		{
+			var contextSignals = ExtractContextSignals(udmContext);
+			hasAge = hasAge || contextSignals.HasAge;
+			hasGender = hasGender || contextSignals.HasGender;
+			hasSmoking = hasSmoking || contextSignals.HasSmoking;
+			hasBudget = hasBudget || contextSignals.HasBudget;
+		}
+
 		if (hasAge && hasGender && hasSmoking && hasBudget)
 		{
 			clarificationPrompt = string.Empty;
@@ -290,6 +314,153 @@ internal sealed class FanOutCoordinatorActor : ReceiveActor
 
 		clarificationPrompt = "I need a bit more to run this case. Could you share age, gender, smoking status, and premium budget?";
 		return false;
+	}
+
+	private static ContextSignals ExtractContextSignals(JsonElement udmContext)
+	{
+		var signals = new ContextSignals(false, false, false, false);
+
+		if (TryGetPropertyIgnoreCase(udmContext, "udm", out var fullUdm))
+		{
+			CollectContextSignals(fullUdm, ref signals);
+		}
+
+		CollectContextSignals(udmContext, ref signals);
+		return signals;
+	}
+
+	private static void CollectContextSignals(JsonElement element, ref ContextSignals signals)
+	{
+		switch (element.ValueKind)
+		{
+			case JsonValueKind.Object:
+				foreach (var property in element.EnumerateObject())
+				{
+					UpdateSignalsFromProperty(property.Name, property.Value, ref signals);
+					CollectContextSignals(property.Value, ref signals);
+
+					if (signals.HasAll)
+					{
+						return;
+					}
+				}
+				break;
+
+			case JsonValueKind.Array:
+				foreach (var item in element.EnumerateArray())
+				{
+					CollectContextSignals(item, ref signals);
+
+					if (signals.HasAll)
+					{
+						return;
+					}
+				}
+				break;
+		}
+	}
+
+	private static void UpdateSignalsFromProperty(string propertyName, JsonElement value, ref ContextSignals signals)
+	{
+		var key = propertyName.Replace("-", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
+
+		if (!signals.HasAge && key == "age" && IsPositiveNumber(value))
+		{
+			signals = signals with { HasAge = true };
+		}
+
+		if (!signals.HasGender && (key == "gender" || key == "sex") && IsGenderValue(value))
+		{
+			signals = signals with { HasGender = true };
+		}
+
+		if (!signals.HasSmoking && IsSmokingField(key) && IsSmokingValue(value))
+		{
+			signals = signals with { HasSmoking = true };
+		}
+
+		if (!signals.HasBudget && BudgetFieldNames.Contains(key) && IsPositiveNumber(value))
+		{
+			signals = signals with { HasBudget = true };
+		}
+	}
+
+	private static bool IsSmokingField(string key)
+		=> key is "smokingstatus" or "smoking_status" or "smokerstatus" or "healthstyle";
+
+	private static bool IsGenderValue(JsonElement value)
+	{
+		if (value.ValueKind != JsonValueKind.String)
+		{
+			return false;
+		}
+
+		var text = value.GetString() ?? string.Empty;
+		return text.Contains("male", StringComparison.OrdinalIgnoreCase)
+			|| text.Contains("female", StringComparison.OrdinalIgnoreCase);
+	}
+
+	private static bool IsSmokingValue(JsonElement value)
+	{
+		if (value.ValueKind != JsonValueKind.String)
+		{
+			return false;
+		}
+
+		var text = value.GetString() ?? string.Empty;
+		if (string.IsNullOrWhiteSpace(text))
+		{
+			return false;
+		}
+
+		if (text.Contains("smoker", StringComparison.OrdinalIgnoreCase)
+			|| text.Contains("non-smoker", StringComparison.OrdinalIgnoreCase)
+			|| text.Contains("nonsmoker", StringComparison.OrdinalIgnoreCase)
+			|| text.Contains("non smoker", StringComparison.OrdinalIgnoreCase))
+		{
+			return true;
+		}
+
+		// HSx/health-style values still indicate smoking classification was provided.
+		return text.StartsWith("HS", StringComparison.OrdinalIgnoreCase);
+	}
+
+	private static bool IsPositiveNumber(JsonElement value)
+	{
+		if (value.ValueKind == JsonValueKind.Number)
+		{
+			return value.TryGetDecimal(out var numeric) && numeric > 0;
+		}
+
+		if (value.ValueKind == JsonValueKind.String)
+		{
+			return decimal.TryParse(value.GetString(), out var parsed) && parsed > 0;
+		}
+
+		return false;
+	}
+
+	private static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)
+	{
+		if (element.ValueKind == JsonValueKind.Object)
+		{
+			foreach (var property in element.EnumerateObject())
+			{
+				if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+				{
+					value = property.Value;
+					return true;
+				}
+			}
+		}
+
+		value = default;
+		return false;
+	}
+
+	private readonly record struct ContextSignals(bool HasAge, bool HasGender, bool HasSmoking, bool HasBudget)
+	{
+		public bool HasAll => HasAge && HasGender && HasSmoking && HasBudget;
 	}
 
 	private static string BuildAssumptions(ChatRequestDto request)

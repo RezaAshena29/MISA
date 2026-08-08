@@ -29,3 +29,4 @@ C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Decisioning.de
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Decisioning.dll
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Decisioning.pdb
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Decisioning.xml
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Decisioning\obj\Debug\net10.0\MISA.Decisioning.sourcelink.json

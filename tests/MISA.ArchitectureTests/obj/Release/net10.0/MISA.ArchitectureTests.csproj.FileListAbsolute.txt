@@ -233,3 +233,4 @@ C:\Reza_Repo\MISA\MISA_Agentic\tests\MISA.ArchitectureTests\bin\Release\net10.0\
 C:\Reza_Repo\MISA\MISA_Agentic\tests\MISA.ArchitectureTests\bin\Release\net10.0\MISA.Functions.dll
 C:\Reza_Repo\MISA\MISA_Agentic\tests\MISA.ArchitectureTests\bin\Release\net10.0\MISA.Functions.pdb
 C:\Reza_Repo\MISA\MISA_Agentic\tests\MISA.ArchitectureTests\bin\Release\net10.0\MISA.Functions.xml
+C:\Reza_Repo\MISA\MISA_Agentic\tests\MISA.ArchitectureTests\obj\Release\net10.0\MISA.ArchitectureTests.sourcelink.json

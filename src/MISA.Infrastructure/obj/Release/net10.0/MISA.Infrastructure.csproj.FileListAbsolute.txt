@@ -25,3 +25,4 @@ C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Infrastructure\obj\Release\net10.0\refin
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Infrastructure\obj\Release\net10.0\MISA.Infrastructure.xml
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Infrastructure\obj\Release\net10.0\MISA.Infrastructure.pdb
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Infrastructure\obj\Release\net10.0\ref\MISA.Infrastructure.dll
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Infrastructure\obj\Release\net10.0\MISA.Infrastructure.sourcelink.json

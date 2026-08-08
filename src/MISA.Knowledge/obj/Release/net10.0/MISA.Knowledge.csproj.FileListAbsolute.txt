@@ -25,3 +25,4 @@ C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Knowledge\obj\Release\net10.0\refint\MIS
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Knowledge\obj\Release\net10.0\MISA.Knowledge.xml
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Knowledge\obj\Release\net10.0\MISA.Knowledge.pdb
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Knowledge\obj\Release\net10.0\ref\MISA.Knowledge.dll
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Knowledge\obj\Release\net10.0\MISA.Knowledge.sourcelink.json

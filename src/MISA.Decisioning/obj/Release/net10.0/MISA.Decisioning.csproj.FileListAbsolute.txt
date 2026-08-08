@@ -25,3 +25,4 @@ C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Decisioning\obj\Release\net10.0\refint\M
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Decisioning\obj\Release\net10.0\MISA.Decisioning.xml
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Decisioning\obj\Release\net10.0\MISA.Decisioning.pdb
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Decisioning\obj\Release\net10.0\ref\MISA.Decisioning.dll
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Decisioning\obj\Release\net10.0\MISA.Decisioning.sourcelink.json

@@ -12,3 +12,4 @@ C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Observability\obj\Release\net10.0\refint
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Observability\obj\Release\net10.0\MISA.Observability.xml
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Observability\obj\Release\net10.0\MISA.Observability.pdb
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Observability\obj\Release\net10.0\ref\MISA.Observability.dll
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Observability\obj\Release\net10.0\MISA.Observability.sourcelink.json

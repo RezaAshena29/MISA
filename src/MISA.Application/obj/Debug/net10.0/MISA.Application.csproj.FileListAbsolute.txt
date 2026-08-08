@@ -23,3 +23,4 @@ C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Application.de
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Application.dll
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Application.pdb
 C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Functions\bin\output\MISA.Application.xml
+C:\Reza_Repo\MISA\MISA_Agentic\src\MISA.Application\obj\Debug\net10.0\MISA.Application.sourcelink.json
