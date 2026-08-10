@@ -1,0 +1,12 @@
+# Build artifacts (all projects)
+**/[Bb]in/
+**/[Oo]bj/
+
+# Visual Studio workspace state
+.vs/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
