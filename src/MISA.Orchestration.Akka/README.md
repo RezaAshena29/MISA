@@ -20,6 +20,8 @@ Implements Akka-first orchestration runtime for the MISA agentic lifecycle.
 - Decision Ranker Agent: select ranked recommendation set.
 - Response Composer Agent: final markdown/SSE result construction.
 
+Implementation note: each listed stage is now backed by a dedicated child actor under `OrchestratorAgentActor`, and orchestrator-to-stage communication uses Akka `Ask` message flow.
+
 ## Runtime Flow
 
 ```mermaid

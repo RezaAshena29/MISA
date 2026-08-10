@@ -68,6 +68,8 @@ flowchart LR
     RC --> SSE[SSE Event Stream]
 ```
 
+  Step 1 status: dedicated Akka actors are now implemented for each lifecycle role, with orchestrator coordination preserving current SSE contract behavior.
+
 ## Akka to MAF Evolution Path
 
 ```mermaid

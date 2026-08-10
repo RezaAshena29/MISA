@@ -112,6 +112,8 @@ internal sealed record ExecuteChat(ChatRequestDto Request);
 
 internal sealed record ChatExecutionResult(IReadOnlyList<ChatEventEnvelope> Events);
 
+internal sealed record FanoutResult(RecommendationTable Recommendation, string Knowledge);
+
 internal sealed class OrchestratorAgentActor : ReceiveActor
 {
 	private const string IllustrationRoute = "illustration";
@@ -139,6 +141,16 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 	private readonly IKnowledgeService _knowledgeService;
 	private readonly IDecisioningService _decisioningService;
 	private readonly IChatSessionStore _sessionStore;
+	private readonly IActorRef _intentAnalyzerAgent;
+	private readonly IActorRef _contextMemoryAgent;
+	private readonly IActorRef _clarifierAgent;
+	private readonly IActorRef _illustrationPlannerAgent;
+	private readonly IActorRef _validationGuardAgent;
+	private readonly IActorRef _calcWorkerPoolAgent;
+	private readonly IActorRef _fanoutDispatcherAgent;
+	private readonly IActorRef _faninAggregatorAgent;
+	private readonly IActorRef _decisionRankerAgent;
+	private readonly IActorRef _responseComposerAgent;
 
 	public OrchestratorAgentActor(
 		IAgentRouter agentRouter,
@@ -150,13 +162,34 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		_knowledgeService = knowledgeService;
 		_decisioningService = decisioningService;
 		_sessionStore = sessionStore;
+		_intentAnalyzerAgent = Context.ActorOf(Props.Create(() => new IntentAnalyzerAgentActor(_agentRouter)), "intent-analyzer-agent");
+		_contextMemoryAgent = Context.ActorOf(Props.Create(() => new ContextMemoryAgentActor(_sessionStore)), "context-memory-agent");
+		_clarifierAgent = Context.ActorOf(Props.Create(() => new ClarifierAgentActor()), "clarifier-agent");
+		_illustrationPlannerAgent = Context.ActorOf(Props.Create(() => new IllustrationPlannerAgentActor()), "illustration-planner-agent");
+		_validationGuardAgent = Context.ActorOf(Props.Create(() => new ValidationGuardAgentActor()), "validation-guard-agent");
+		_calcWorkerPoolAgent = Context.ActorOf(Props.Create(() => new CalcWorkerPoolAgentActor(_decisioningService)), "calc-worker-pool-agent");
+		_fanoutDispatcherAgent = Context.ActorOf(Props.Create(() => new FanoutDispatcherAgentActor(_calcWorkerPoolAgent, _knowledgeService)), "fanout-dispatcher-agent");
+		_faninAggregatorAgent = Context.ActorOf(Props.Create(() => new FaninAggregatorAgentActor()), "fanin-aggregator-agent");
+		_decisionRankerAgent = Context.ActorOf(Props.Create(() => new DecisionRankerAgentActor()), "decision-ranker-agent");
+		_responseComposerAgent = Context.ActorOf(Props.Create(() => new ResponseComposerAgentActor()), "response-composer-agent");
 
 		ReceiveAsync<ExecuteChat>(HandleAsync);
 	}
 
 	private readonly record struct RouteResolution(string Route, ChatSessionState? PriorState);
+	private readonly record struct ValidationGuardOutcome(bool IsSufficient, string ClarificationPrompt);
 
-	private readonly record struct FanoutResult(RecommendationTable Recommendation, string Knowledge);
+	private sealed record ResolveIntentCommand(ChatRequestDto Request);
+	private sealed record LoadSessionStateCommand(string SessionId);
+	private sealed record SaveSessionStateCommand(ChatSessionState State);
+	private sealed record BuildClarificationCommand();
+	private sealed record BuildAssumptionsCommand(ChatRequestDto Request);
+	private sealed record ValidateIllustrationInputCommand(ChatRequestDto Request);
+	private sealed record ExecuteCalculationCommand(ChatRequestDto Request);
+	private sealed record DispatchFanoutCommand(ChatRequestDto Request);
+	private sealed record AggregateFanoutCommand(FanoutResult Result);
+	private sealed record RankRecommendationCommand(RecommendationTable Recommendation);
+	private sealed record ComposeResponseCommand(RecommendationTable Recommendation, string Knowledge);
 
 	private async Task HandleAsync(ExecuteChat command)
 	{
@@ -194,8 +227,8 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		ChatRequestDto request,
 		CancellationToken cancellationToken)
 	{
-		var routeTask = _agentRouter.ResolveRouteAsync(request, cancellationToken);
-		var priorStateTask = _sessionStore.GetAsync(request.SessionId, cancellationToken);
+		var routeTask = _intentAnalyzerAgent.Ask<string>(new ResolveIntentCommand(request), cancellationToken);
+		var priorStateTask = _contextMemoryAgent.Ask<ChatSessionState?>(new LoadSessionStateCommand(request.SessionId), cancellationToken);
 		await Task.WhenAll(routeTask, priorStateTask).ConfigureAwait(false);
 
 		return new RouteResolution(routeTask.Result, priorStateTask.Result);
@@ -207,8 +240,10 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		CancellationToken cancellationToken)
 	{
 		var knowledge = await _knowledgeService.AnswerAsync(request, cancellationToken).ConfigureAwait(false);
-		await _sessionStore
-			.SaveAsync(new ChatSessionState(request.SessionId, LastRoute: KnowledgeRoute, LastRecommendation: priorState?.LastRecommendation), cancellationToken)
+		await _contextMemoryAgent
+			.Ask<bool>(
+				new SaveSessionStateCommand(new ChatSessionState(request.SessionId, LastRoute: KnowledgeRoute, LastRecommendation: priorState?.LastRecommendation)),
+				cancellationToken)
 			.ConfigureAwait(false);
 
 		return
@@ -224,8 +259,10 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		CancellationToken cancellationToken)
 	{
 		var reasoningContent = await BuildReasoningContentAsync(request, priorState, cancellationToken).ConfigureAwait(false);
-		await _sessionStore
-			.SaveAsync(new ChatSessionState(request.SessionId, LastRoute: ReasoningRoute, LastRecommendation: priorState?.LastRecommendation), cancellationToken)
+		await _contextMemoryAgent
+			.Ask<bool>(
+				new SaveSessionStateCommand(new ChatSessionState(request.SessionId, LastRoute: ReasoningRoute, LastRecommendation: priorState?.LastRecommendation)),
+				cancellationToken)
 			.ConfigureAwait(false);
 
 		return
@@ -240,15 +277,21 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		ChatSessionState? priorState,
 		CancellationToken cancellationToken)
 	{
-		await _sessionStore
-			.SaveAsync(new ChatSessionState(request.SessionId, LastRoute: ClarificationRoute, LastRecommendation: priorState?.LastRecommendation), cancellationToken)
+		await _contextMemoryAgent
+			.Ask<bool>(
+				new SaveSessionStateCommand(new ChatSessionState(request.SessionId, LastRoute: ClarificationRoute, LastRecommendation: priorState?.LastRecommendation)),
+				cancellationToken)
+			.ConfigureAwait(false);
+
+		var clarificationPrompt = await _clarifierAgent
+			.Ask<string>(new BuildClarificationCommand(), cancellationToken)
 			.ConfigureAwait(false);
 
 		return
 		[
 			ChatEventEnvelope.Text(
 				ChatEventType.Clarification,
-				"I need a bit more to run this case. Could you share age, gender, smoking status, and premium budget?")
+				clarificationPrompt)
 		];
 	}
 
@@ -260,8 +303,10 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		var lastRecommendation = illustrationEvents
 			.LastOrDefault(evt => evt.Type == ChatEventType.Result)?.Content?.ToString();
 
-		await _sessionStore
-			.SaveAsync(new ChatSessionState(request.SessionId, LastRoute: IllustrationRoute, LastRecommendation: lastRecommendation), cancellationToken)
+		await _contextMemoryAgent
+			.Ask<bool>(
+				new SaveSessionStateCommand(new ChatSessionState(request.SessionId, LastRoute: IllustrationRoute, LastRecommendation: lastRecommendation)),
+				cancellationToken)
 			.ConfigureAwait(false);
 
 		return illustrationEvents;
@@ -278,13 +323,19 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 				"The user is asking me to help find the best policy for their client. Intention category: **Illustration**.")
 		};
 
-		if (!RunValidationGuardAgent(request, out var clarificationPrompt))
+		var validationOutcome = await _validationGuardAgent
+			.Ask<ValidationGuardOutcome>(new ValidateIllustrationInputCommand(request), cancellationToken)
+			.ConfigureAwait(false);
+
+		if (!validationOutcome.IsSufficient)
 		{
-			events.Add(ChatEventEnvelope.Text(ChatEventType.Clarification, clarificationPrompt));
+			events.Add(ChatEventEnvelope.Text(ChatEventType.Clarification, validationOutcome.ClarificationPrompt));
 			return events;
 		}
 
-		var assumptions = RunIllustrationPlannerAgent(request);
+		var assumptions = await _illustrationPlannerAgent
+			.Ask<string>(new BuildAssumptionsCommand(request), cancellationToken)
+			.ConfigureAwait(false);
 		if (!string.IsNullOrWhiteSpace(assumptions))
 		{
 			events.Add(ChatEventEnvelope.Text(ChatEventType.Assumptions, assumptions));
@@ -301,13 +352,22 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 				"Pre-validation warnings (kept, review before quoting):\n- **Pay 90 25% DO**: fallback may switch to No-DO when constraints are infeasible."));
 		}
 
-		var fanoutResult = await RunFanoutDispatcherAgentAsync(request, cancellationToken).ConfigureAwait(false);
-		var faninResult = RunFaninAggregatorAgent(fanoutResult);
-		var rankedRecommendation = RunDecisionRankerAgent(faninResult.Recommendation);
+		var fanoutResult = await _fanoutDispatcherAgent
+			.Ask<FanoutResult>(new DispatchFanoutCommand(request), cancellationToken)
+			.ConfigureAwait(false);
+		var faninResult = await _faninAggregatorAgent
+			.Ask<FanoutResult>(new AggregateFanoutCommand(fanoutResult), cancellationToken)
+			.ConfigureAwait(false);
+		var rankedRecommendation = await _decisionRankerAgent
+			.Ask<RecommendationTable>(new RankRecommendationCommand(faninResult.Recommendation), cancellationToken)
+			.ConfigureAwait(false);
 
 		events.Add(ChatEventEnvelope.Text(ChatEventType.Progress, "Received successful results. Comparing and ranking..."));
 
-		events.Add(RunResponseComposerAgent(rankedRecommendation, faninResult.Knowledge));
+		var composedEvent = await _responseComposerAgent
+			.Ask<ChatEventEnvelope>(new ComposeResponseCommand(rankedRecommendation, faninResult.Knowledge), cancellationToken)
+			.ConfigureAwait(false);
+		events.Add(composedEvent);
 
 		if (request.ContextConsent && request.UdmContext is not null)
 		{
@@ -317,31 +377,147 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		return events;
 	}
 
-	private static bool RunValidationGuardAgent(ChatRequestDto request, out string clarificationPrompt)
-		=> HasSufficientIllustrationInput(request, out clarificationPrompt);
-
-	private static string RunIllustrationPlannerAgent(ChatRequestDto request)
-		=> BuildAssumptions(request);
-
-	private async Task<FanoutResult> RunFanoutDispatcherAgentAsync(
-		ChatRequestDto request,
-		CancellationToken cancellationToken)
+	private sealed class IntentAnalyzerAgentActor : ReceiveActor
 	{
-		var recommendationTask = _decisioningService.BuildRecommendationTableAsync(request, cancellationToken);
-		var knowledgeTask = _knowledgeService.AnswerAsync(request, cancellationToken);
-		await Task.WhenAll(recommendationTask, knowledgeTask).ConfigureAwait(false);
+		private readonly IAgentRouter _agentRouter;
 
-		return new FanoutResult(recommendationTask.Result, knowledgeTask.Result);
+		public IntentAnalyzerAgentActor(IAgentRouter agentRouter)
+		{
+			_agentRouter = agentRouter;
+			ReceiveAsync<ResolveIntentCommand>(HandleAsync);
+		}
+
+		private async Task HandleAsync(ResolveIntentCommand command)
+		{
+			var replyTo = Sender;
+			var route = await _agentRouter.ResolveRouteAsync(command.Request, CancellationToken.None).ConfigureAwait(false);
+			replyTo.Tell(route);
+		}
 	}
 
-	private static FanoutResult RunFaninAggregatorAgent(FanoutResult fanoutResult)
-		=> fanoutResult;
+	private sealed class ContextMemoryAgentActor : ReceiveActor
+	{
+		private readonly IChatSessionStore _sessionStore;
 
-	private static RecommendationTable RunDecisionRankerAgent(RecommendationTable recommendation)
-		=> recommendation;
+		public ContextMemoryAgentActor(IChatSessionStore sessionStore)
+		{
+			_sessionStore = sessionStore;
+			ReceiveAsync<LoadSessionStateCommand>(LoadAsync);
+			ReceiveAsync<SaveSessionStateCommand>(SaveAsync);
+		}
 
-	private static ChatEventEnvelope RunResponseComposerAgent(RecommendationTable recommendation, string knowledge)
-		=> ChatEventEnvelope.Text(ChatEventType.Result, FormatIllustrationResultMarkdown(recommendation, knowledge));
+		private async Task LoadAsync(LoadSessionStateCommand command)
+		{
+			var replyTo = Sender;
+			var state = await _sessionStore.GetAsync(command.SessionId, CancellationToken.None).ConfigureAwait(false);
+			replyTo.Tell(state);
+		}
+
+		private async Task SaveAsync(SaveSessionStateCommand command)
+		{
+			var replyTo = Sender;
+			await _sessionStore.SaveAsync(command.State, CancellationToken.None).ConfigureAwait(false);
+			replyTo.Tell(true);
+		}
+	}
+
+	private sealed class ClarifierAgentActor : ReceiveActor
+	{
+		private const string DefaultPrompt = "I need a bit more to run this case. Could you share age, gender, smoking status, and premium budget?";
+
+		public ClarifierAgentActor()
+		{
+			Receive<BuildClarificationCommand>(_ => Sender.Tell(DefaultPrompt));
+		}
+	}
+
+	private sealed class IllustrationPlannerAgentActor : ReceiveActor
+	{
+		public IllustrationPlannerAgentActor()
+		{
+			Receive<BuildAssumptionsCommand>(command => Sender.Tell(BuildAssumptions(command.Request)));
+		}
+	}
+
+	private sealed class ValidationGuardAgentActor : ReceiveActor
+	{
+		public ValidationGuardAgentActor()
+		{
+			Receive<ValidateIllustrationInputCommand>(command =>
+			{
+				var isSufficient = HasSufficientIllustrationInput(command.Request, out var clarificationPrompt);
+				Sender.Tell(new ValidationGuardOutcome(isSufficient, clarificationPrompt));
+			});
+		}
+	}
+
+	private sealed class CalcWorkerPoolAgentActor : ReceiveActor
+	{
+		private readonly IDecisioningService _decisioningService;
+
+		public CalcWorkerPoolAgentActor(IDecisioningService decisioningService)
+		{
+			_decisioningService = decisioningService;
+			ReceiveAsync<ExecuteCalculationCommand>(HandleAsync);
+		}
+
+		private async Task HandleAsync(ExecuteCalculationCommand command)
+		{
+			var replyTo = Sender;
+			var recommendation = await _decisioningService
+				.BuildRecommendationTableAsync(command.Request, CancellationToken.None)
+				.ConfigureAwait(false);
+			replyTo.Tell(recommendation);
+		}
+	}
+
+	private sealed class FanoutDispatcherAgentActor : ReceiveActor
+	{
+		private readonly IActorRef _calcWorkerPoolAgent;
+		private readonly IKnowledgeService _knowledgeService;
+
+		public FanoutDispatcherAgentActor(IActorRef calcWorkerPoolAgent, IKnowledgeService knowledgeService)
+		{
+			_calcWorkerPoolAgent = calcWorkerPoolAgent;
+			_knowledgeService = knowledgeService;
+			ReceiveAsync<DispatchFanoutCommand>(HandleAsync);
+		}
+
+		private async Task HandleAsync(DispatchFanoutCommand command)
+		{
+			var replyTo = Sender;
+			var recommendationTask = _calcWorkerPoolAgent.Ask<RecommendationTable>(new ExecuteCalculationCommand(command.Request), CancellationToken.None);
+			var knowledgeTask = _knowledgeService.AnswerAsync(command.Request, CancellationToken.None);
+			await Task.WhenAll(recommendationTask, knowledgeTask).ConfigureAwait(false);
+
+			replyTo.Tell(new FanoutResult(recommendationTask.Result, knowledgeTask.Result));
+		}
+	}
+
+	private sealed class FaninAggregatorAgentActor : ReceiveActor
+	{
+		public FaninAggregatorAgentActor()
+		{
+			Receive<AggregateFanoutCommand>(command => Sender.Tell(command.Result));
+		}
+	}
+
+	private sealed class DecisionRankerAgentActor : ReceiveActor
+	{
+		public DecisionRankerAgentActor()
+		{
+			Receive<RankRecommendationCommand>(command => Sender.Tell(command.Recommendation));
+		}
+	}
+
+	private sealed class ResponseComposerAgentActor : ReceiveActor
+	{
+		public ResponseComposerAgentActor()
+		{
+			Receive<ComposeResponseCommand>(command =>
+				Sender.Tell(ChatEventEnvelope.Text(ChatEventType.Result, FormatIllustrationResultMarkdown(command.Recommendation, command.Knowledge))));
+		}
+	}
 
 	private async Task<string> BuildReasoningContentAsync(
 		ChatRequestDto request,
