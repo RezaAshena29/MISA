@@ -69,3 +69,21 @@ public sealed record ChatSessionContext(
 	ClientProfile? Client = null,
 	ScenarioIntent? Intent = null,
 	DecisionTrace? Trace = null);
+
+/// <summary>
+/// Canonical agent names used by the MISA agentic orchestration lifecycle.
+/// </summary>
+public static class AgentNames
+{
+	public const string OrchestratorAgent = "Orchestrator Agent";
+	public const string IntentAnalyzerAgent = "Intent Analyzer Agent";
+	public const string ContextMemoryAgent = "Context Memory Agent";
+	public const string ClarifierAgent = "Clarifier Agent";
+	public const string IllustrationPlannerAgent = "Illustration Planner Agent";
+	public const string ValidationGuardAgent = "Validation Guard Agent";
+	public const string FanoutDispatcherAgent = "Fanout Dispatcher Agent";
+	public const string CalcWorkerPoolAgent = "Calc Worker Pool Agent";
+	public const string FaninAggregatorAgent = "Fanin Aggregator Agent";
+	public const string DecisionRankerAgent = "Decision Ranker Agent";
+	public const string ResponseComposerAgent = "Response Composer Agent";
+}

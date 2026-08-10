@@ -47,8 +47,8 @@ akka {
 
 		_actorSystem = ActorSystem.Create("misa-agentic-system", config);
 		_coordinator = _actorSystem.ActorOf(
-			Props.Create(() => new FanOutCoordinatorActor(agentRouter, knowledgeService, decisioningService, sessionStore)),
-			"fanout-coordinator");
+			Props.Create(() => new OrchestratorAgentActor(agentRouter, knowledgeService, decisioningService, sessionStore)),
+			"orchestrator-agent");
 
 		AkkaRuntimeLog.RuntimeInitialized(_logger);
 	}
@@ -112,8 +112,13 @@ internal sealed record ExecuteChat(ChatRequestDto Request);
 
 internal sealed record ChatExecutionResult(IReadOnlyList<ChatEventEnvelope> Events);
 
-internal sealed class FanOutCoordinatorActor : ReceiveActor
+internal sealed class OrchestratorAgentActor : ReceiveActor
 {
+	private const string IllustrationRoute = "illustration";
+	private const string ClarificationRoute = "clarification";
+	private const string KnowledgeRoute = "knowledge";
+	private const string ReasoningRoute = "reasoning";
+
 	private static readonly Regex AgePattern = new(@"\bage\s*\d{1,2}\b|\b\d{1,2}\s*(?:yo|years?|yrs?)\b|\b(?:client|insured|applicant)\s*(?:is|:)\s*\d{1,2}\b|\b\d{1,2}\s*,\s*(?:male|female|man|woman)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 	private static readonly Regex BudgetPattern = new(@"\$\s*\d|\bbudget\b|\bpremium\b|\b\d+k\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 	private static readonly HashSet<string> BudgetFieldNames =
@@ -135,7 +140,7 @@ internal sealed class FanOutCoordinatorActor : ReceiveActor
 	private readonly IDecisioningService _decisioningService;
 	private readonly IChatSessionStore _sessionStore;
 
-	public FanOutCoordinatorActor(
+	public OrchestratorAgentActor(
 		IAgentRouter agentRouter,
 		IKnowledgeService knowledgeService,
 		IDecisioningService decisioningService,
@@ -149,73 +154,117 @@ internal sealed class FanOutCoordinatorActor : ReceiveActor
 		ReceiveAsync<ExecuteChat>(HandleAsync);
 	}
 
+	private readonly record struct RouteResolution(string Route, ChatSessionState? PriorState);
+
+	private readonly record struct FanoutResult(RecommendationTable Recommendation, string Knowledge);
+
 	private async Task HandleAsync(ExecuteChat command)
 	{
 		var replyTo = Sender;
 		var cancellationToken = CancellationToken.None;
 		var request = command.Request;
+		var routeResolution = await RunIntentAnalyzerAndContextMemoryAgentsAsync(request, cancellationToken).ConfigureAwait(false);
 
+		if (string.Equals(routeResolution.Route, KnowledgeRoute, StringComparison.OrdinalIgnoreCase))
+		{
+			replyTo.Tell(new ChatExecutionResult(
+				await RunKnowledgeRouteAsync(request, routeResolution.PriorState, cancellationToken).ConfigureAwait(false)));
+			return;
+		}
+
+		if (string.Equals(routeResolution.Route, ReasoningRoute, StringComparison.OrdinalIgnoreCase))
+		{
+			replyTo.Tell(new ChatExecutionResult(
+				await RunReasoningRouteAsync(request, routeResolution.PriorState, cancellationToken).ConfigureAwait(false)));
+			return;
+		}
+
+		if (string.Equals(routeResolution.Route, ClarificationRoute, StringComparison.OrdinalIgnoreCase))
+		{
+			replyTo.Tell(new ChatExecutionResult(
+				await RunClarifierRouteAsync(request, routeResolution.PriorState, cancellationToken).ConfigureAwait(false)));
+			return;
+		}
+
+		replyTo.Tell(new ChatExecutionResult(
+			await RunIllustrationRouteAsync(request, cancellationToken).ConfigureAwait(false)));
+	}
+
+	private async Task<RouteResolution> RunIntentAnalyzerAndContextMemoryAgentsAsync(
+		ChatRequestDto request,
+		CancellationToken cancellationToken)
+	{
 		var routeTask = _agentRouter.ResolveRouteAsync(request, cancellationToken);
 		var priorStateTask = _sessionStore.GetAsync(request.SessionId, cancellationToken);
 		await Task.WhenAll(routeTask, priorStateTask).ConfigureAwait(false);
 
-		var route = routeTask.Result;
-		var priorState = priorStateTask.Result;
+		return new RouteResolution(routeTask.Result, priorStateTask.Result);
+	}
 
-		if (string.Equals(route, "knowledge", StringComparison.OrdinalIgnoreCase))
-		{
-			var knowledge = await _knowledgeService.AnswerAsync(request, cancellationToken).ConfigureAwait(false);
-			await _sessionStore
-				.SaveAsync(new ChatSessionState(request.SessionId, LastRoute: "knowledge", LastRecommendation: priorState?.LastRecommendation), cancellationToken)
-				.ConfigureAwait(false);
+	private async Task<IReadOnlyList<ChatEventEnvelope>> RunKnowledgeRouteAsync(
+		ChatRequestDto request,
+		ChatSessionState? priorState,
+		CancellationToken cancellationToken)
+	{
+		var knowledge = await _knowledgeService.AnswerAsync(request, cancellationToken).ConfigureAwait(false);
+		await _sessionStore
+			.SaveAsync(new ChatSessionState(request.SessionId, LastRoute: KnowledgeRoute, LastRecommendation: priorState?.LastRecommendation), cancellationToken)
+			.ConfigureAwait(false);
 
-			replyTo.Tell(new ChatExecutionResult(
-			[
-				ChatEventEnvelope.Text(ChatEventType.Thinking, "Looking this up in the knowledge base..."),
-				ChatEventEnvelope.Text(ChatEventType.Result, knowledge)
-			]));
-			return;
-		}
+		return
+		[
+			ChatEventEnvelope.Text(ChatEventType.Thinking, "Looking this up in the knowledge base..."),
+			ChatEventEnvelope.Text(ChatEventType.Result, knowledge)
+		];
+	}
 
-		if (string.Equals(route, "reasoning", StringComparison.OrdinalIgnoreCase))
-		{
-			var reasoningContent = await BuildReasoningContentAsync(request, priorState, cancellationToken).ConfigureAwait(false);
-			await _sessionStore
-				.SaveAsync(new ChatSessionState(request.SessionId, LastRoute: "reasoning", LastRecommendation: priorState?.LastRecommendation), cancellationToken)
-				.ConfigureAwait(false);
+	private async Task<IReadOnlyList<ChatEventEnvelope>> RunReasoningRouteAsync(
+		ChatRequestDto request,
+		ChatSessionState? priorState,
+		CancellationToken cancellationToken)
+	{
+		var reasoningContent = await BuildReasoningContentAsync(request, priorState, cancellationToken).ConfigureAwait(false);
+		await _sessionStore
+			.SaveAsync(new ChatSessionState(request.SessionId, LastRoute: ReasoningRoute, LastRecommendation: priorState?.LastRecommendation), cancellationToken)
+			.ConfigureAwait(false);
 
-			replyTo.Tell(new ChatExecutionResult(
-			[
-				ChatEventEnvelope.Text(ChatEventType.Thinking, "Looking up why this recommendation was selected..."),
-				ChatEventEnvelope.Text(ChatEventType.Result, reasoningContent)
-			]));
-			return;
-		}
+		return
+		[
+			ChatEventEnvelope.Text(ChatEventType.Thinking, "Looking up why this recommendation was selected..."),
+			ChatEventEnvelope.Text(ChatEventType.Result, reasoningContent)
+		];
+	}
 
-		if (string.Equals(route, "clarification", StringComparison.OrdinalIgnoreCase))
-		{
-			await _sessionStore
-				.SaveAsync(new ChatSessionState(request.SessionId, LastRoute: "clarification", LastRecommendation: priorState?.LastRecommendation), cancellationToken)
-				.ConfigureAwait(false);
+	private async Task<IReadOnlyList<ChatEventEnvelope>> RunClarifierRouteAsync(
+		ChatRequestDto request,
+		ChatSessionState? priorState,
+		CancellationToken cancellationToken)
+	{
+		await _sessionStore
+			.SaveAsync(new ChatSessionState(request.SessionId, LastRoute: ClarificationRoute, LastRecommendation: priorState?.LastRecommendation), cancellationToken)
+			.ConfigureAwait(false);
 
-			replyTo.Tell(new ChatExecutionResult(
-			[
-				ChatEventEnvelope.Text(
-					ChatEventType.Clarification,
-					"I need a bit more to run this case. Could you share age, gender, smoking status, and premium budget?")
-			]));
-			return;
-		}
+		return
+		[
+			ChatEventEnvelope.Text(
+				ChatEventType.Clarification,
+				"I need a bit more to run this case. Could you share age, gender, smoking status, and premium budget?")
+		];
+	}
 
+	private async Task<IReadOnlyList<ChatEventEnvelope>> RunIllustrationRouteAsync(
+		ChatRequestDto request,
+		CancellationToken cancellationToken)
+	{
 		var illustrationEvents = await BuildIllustrationEventsAsync(request, cancellationToken).ConfigureAwait(false);
 		var lastRecommendation = illustrationEvents
 			.LastOrDefault(evt => evt.Type == ChatEventType.Result)?.Content?.ToString();
 
 		await _sessionStore
-			.SaveAsync(new ChatSessionState(request.SessionId, LastRoute: "illustration", LastRecommendation: lastRecommendation), cancellationToken)
+			.SaveAsync(new ChatSessionState(request.SessionId, LastRoute: IllustrationRoute, LastRecommendation: lastRecommendation), cancellationToken)
 			.ConfigureAwait(false);
 
-		replyTo.Tell(new ChatExecutionResult(illustrationEvents));
+		return illustrationEvents;
 	}
 
 	private async Task<IReadOnlyList<ChatEventEnvelope>> BuildIllustrationEventsAsync(
@@ -229,13 +278,13 @@ internal sealed class FanOutCoordinatorActor : ReceiveActor
 				"The user is asking me to help find the best policy for their client. Intention category: **Illustration**.")
 		};
 
-		if (!HasSufficientIllustrationInput(request, out var clarificationPrompt))
+		if (!RunValidationGuardAgent(request, out var clarificationPrompt))
 		{
 			events.Add(ChatEventEnvelope.Text(ChatEventType.Clarification, clarificationPrompt));
 			return events;
 		}
 
-		var assumptions = BuildAssumptions(request);
+		var assumptions = RunIllustrationPlannerAgent(request);
 		if (!string.IsNullOrWhiteSpace(assumptions))
 		{
 			events.Add(ChatEventEnvelope.Text(ChatEventType.Assumptions, assumptions));
@@ -252,25 +301,47 @@ internal sealed class FanOutCoordinatorActor : ReceiveActor
 				"Pre-validation warnings (kept, review before quoting):\n- **Pay 90 25% DO**: fallback may switch to No-DO when constraints are infeasible."));
 		}
 
-		// Fan-out: compute recommendation and supporting knowledge concurrently.
-		var recommendationTask = _decisioningService.BuildRecommendationTableAsync(request, cancellationToken);
-		var knowledgeTask = _knowledgeService.AnswerAsync(request, cancellationToken);
-		await Task.WhenAll(recommendationTask, knowledgeTask).ConfigureAwait(false);
-		var recommendation = recommendationTask.Result;
+		var fanoutResult = await RunFanoutDispatcherAgentAsync(request, cancellationToken).ConfigureAwait(false);
+		var faninResult = RunFaninAggregatorAgent(fanoutResult);
+		var rankedRecommendation = RunDecisionRankerAgent(faninResult.Recommendation);
 
 		events.Add(ChatEventEnvelope.Text(ChatEventType.Progress, "Received successful results. Comparing and ranking..."));
 
-		events.Add(ChatEventEnvelope.Text(
-			ChatEventType.Result,
-			FormatIllustrationResultMarkdown(recommendation, knowledgeTask.Result)));
+		events.Add(RunResponseComposerAgent(rankedRecommendation, faninResult.Knowledge));
 
 		if (request.ContextConsent && request.UdmContext is not null)
 		{
-			events.Add(new ChatEventEnvelope(ChatEventType.Columns, BuildColumnsPayload(request, recommendation)));
+			events.Add(new ChatEventEnvelope(ChatEventType.Columns, BuildColumnsPayload(request, rankedRecommendation)));
 		}
 
 		return events;
 	}
+
+	private static bool RunValidationGuardAgent(ChatRequestDto request, out string clarificationPrompt)
+		=> HasSufficientIllustrationInput(request, out clarificationPrompt);
+
+	private static string RunIllustrationPlannerAgent(ChatRequestDto request)
+		=> BuildAssumptions(request);
+
+	private async Task<FanoutResult> RunFanoutDispatcherAgentAsync(
+		ChatRequestDto request,
+		CancellationToken cancellationToken)
+	{
+		var recommendationTask = _decisioningService.BuildRecommendationTableAsync(request, cancellationToken);
+		var knowledgeTask = _knowledgeService.AnswerAsync(request, cancellationToken);
+		await Task.WhenAll(recommendationTask, knowledgeTask).ConfigureAwait(false);
+
+		return new FanoutResult(recommendationTask.Result, knowledgeTask.Result);
+	}
+
+	private static FanoutResult RunFaninAggregatorAgent(FanoutResult fanoutResult)
+		=> fanoutResult;
+
+	private static RecommendationTable RunDecisionRankerAgent(RecommendationTable recommendation)
+		=> recommendation;
+
+	private static ChatEventEnvelope RunResponseComposerAgent(RecommendationTable recommendation, string knowledge)
+		=> ChatEventEnvelope.Text(ChatEventType.Result, FormatIllustrationResultMarkdown(recommendation, knowledge));
 
 	private async Task<string> BuildReasoningContentAsync(
 		ChatRequestDto request,
