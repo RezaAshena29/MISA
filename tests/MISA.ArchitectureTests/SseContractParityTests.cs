@@ -47,6 +47,99 @@ public sealed class SseContractParityTests
 	}
 
 	[Fact]
+	public async Task IllustrationRouteCalculationTimeoutUsesFallbackRecommendationAndPartialProgress()
+	{
+		await using var runtime = new AkkaClusterExecutionRuntime(
+			new FixedRouteRouter("illustration"),
+			new StaticKnowledgeService(),
+			new SlowDecisioningService(TimeSpan.FromSeconds(7)),
+			new InMemoryChatSessionStore(),
+			NullLogger<AkkaClusterExecutionRuntime>.Instance);
+
+		var request = new ChatRequestDto("male age 45 non-smoker budget $100k", "session-calc-timeout");
+		var events = await CollectAsync(runtime.ExecuteAsync(request, CancellationToken.None));
+
+		var fallbackPrevalidation = Assert.Single(
+			events,
+			evt =>
+				evt.Type == ChatEventType.Prevalidation
+				&& EventContent(evt).Contains("Resiliency fallback was activated", StringComparison.Ordinal));
+		var warningContent = EventContent(fallbackPrevalidation);
+		Assert.Contains("calculation branch", warningContent, StringComparison.OrdinalIgnoreCase);
+
+		var fallbackProgress = Assert.Single(
+			events,
+			evt =>
+				evt.Type == ChatEventType.Progress
+				&& EventContent(evt).Contains("Applying fallback ranking", StringComparison.OrdinalIgnoreCase));
+		Assert.Contains("partial results", EventContent(fallbackProgress), StringComparison.OrdinalIgnoreCase);
+
+		var resultEvent = Assert.Single(events, evt => evt.Type == ChatEventType.Result);
+		Assert.Contains("Fallback recommendation (partial execution)", EventContent(resultEvent), StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public async Task IllustrationRouteKnowledgeTimeoutUsesFallbackKnowledgeAndPartialProgress()
+	{
+		await using var runtime = new AkkaClusterExecutionRuntime(
+			new FixedRouteRouter("illustration"),
+			new SlowKnowledgeService(TimeSpan.FromSeconds(4)),
+			new StaticDecisioningService(),
+			new InMemoryChatSessionStore(),
+			NullLogger<AkkaClusterExecutionRuntime>.Instance);
+
+		var request = new ChatRequestDto("male age 45 non-smoker budget $100k", "session-knowledge-timeout");
+		var events = await CollectAsync(runtime.ExecuteAsync(request, CancellationToken.None));
+
+		var fallbackPrevalidation = Assert.Single(
+			events,
+			evt =>
+				evt.Type == ChatEventType.Prevalidation
+				&& EventContent(evt).Contains("Resiliency fallback was activated", StringComparison.Ordinal));
+		Assert.Contains("knowledge branch timed out", EventContent(fallbackPrevalidation), StringComparison.OrdinalIgnoreCase);
+
+		var fallbackProgress = Assert.Single(
+			events,
+			evt =>
+				evt.Type == ChatEventType.Progress
+				&& EventContent(evt).Contains("Applying fallback ranking", StringComparison.OrdinalIgnoreCase));
+		Assert.Contains("partial results", EventContent(fallbackProgress), StringComparison.OrdinalIgnoreCase);
+
+		var resultEvent = Assert.Single(events, evt => evt.Type == ChatEventType.Result);
+		Assert.Contains("Supporting knowledge is temporarily unavailable", EventContent(resultEvent), StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public async Task IllustrationRouteBranchFailuresEmitCombinedFallbackWarningAndPartialProgress()
+	{
+		await using var runtime = new AkkaClusterExecutionRuntime(
+			new FixedRouteRouter("illustration"),
+			new ThrowingKnowledgeService(),
+			new ThrowingDecisioningService(),
+			new InMemoryChatSessionStore(),
+			NullLogger<AkkaClusterExecutionRuntime>.Instance);
+
+		var request = new ChatRequestDto("male age 45 non-smoker budget $100k", "session-fallback-warning");
+		var events = await CollectAsync(runtime.ExecuteAsync(request, CancellationToken.None));
+
+		var fallbackPrevalidation = Assert.Single(
+			events,
+			evt =>
+				evt.Type == ChatEventType.Prevalidation
+				&& EventContent(evt).Contains("Resiliency fallback was activated", StringComparison.Ordinal));
+		var warningContent = EventContent(fallbackPrevalidation);
+		Assert.Contains("calculation branch failed", warningContent, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("knowledge branch failed", warningContent, StringComparison.OrdinalIgnoreCase);
+
+		var fallbackProgress = Assert.Single(
+			events,
+			evt =>
+				evt.Type == ChatEventType.Progress
+				&& EventContent(evt).Contains("Applying fallback ranking", StringComparison.OrdinalIgnoreCase));
+		Assert.Contains("partial results", EventContent(fallbackProgress), StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
 	public async Task ContextConsentProducesColumnsPayload()
 	{
 		var sessionStore = new InMemoryChatSessionStore();
@@ -164,6 +257,11 @@ public sealed class SseContractParityTests
 		return results;
 	}
 
+	private static string EventContent(ChatEventEnvelope envelope)
+	{
+		return envelope.Content?.ToString() ?? string.Empty;
+	}
+
 	private sealed class FixedRouteRouter : IAgentRouter
 	{
 		private readonly string _route;
@@ -185,6 +283,101 @@ public sealed class SseContractParityTests
 		{
 			return Task.FromResult("Knowledge reference for contract test.");
 		}
+	}
+
+	private sealed class SlowKnowledgeService : IKnowledgeService
+	{
+		private readonly TimeSpan _delay;
+
+		public SlowKnowledgeService(TimeSpan delay)
+		{
+			_delay = delay;
+		}
+
+		public async Task<string> AnswerAsync(ChatRequestDto request, CancellationToken cancellationToken)
+		{
+			await Task.Delay(_delay, cancellationToken);
+			return "Delayed knowledge response for timeout test.";
+		}
+	}
+
+	private sealed class ThrowingKnowledgeService : IKnowledgeService
+	{
+		public Task<string> AnswerAsync(ChatRequestDto request, CancellationToken cancellationToken)
+		{
+			return Task.FromException<string>(new InvalidOperationException("knowledge test failure"));
+		}
+	}
+
+	private sealed class SlowDecisioningService : IDecisioningService
+	{
+		private readonly TimeSpan _delay;
+
+		public SlowDecisioningService(TimeSpan delay)
+		{
+			_delay = delay;
+		}
+
+		public async Task<string> BuildRecommendationAsync(ChatRequestDto request, CancellationToken cancellationToken)
+		{
+			await Task.Delay(_delay, cancellationToken);
+			return "Delayed recommendation for timeout test.";
+		}
+
+		public async Task<RecommendationTable> BuildRecommendationTableAsync(ChatRequestDto request, CancellationToken cancellationToken)
+		{
+			await Task.Delay(_delay, cancellationToken);
+			return BuildMinimalRecommendationTable();
+		}
+	}
+
+	private sealed class ThrowingDecisioningService : IDecisioningService
+	{
+		public Task<string> BuildRecommendationAsync(ChatRequestDto request, CancellationToken cancellationToken)
+		{
+			return Task.FromException<string>(new InvalidOperationException("decisioning test failure"));
+		}
+
+		public Task<RecommendationTable> BuildRecommendationTableAsync(ChatRequestDto request, CancellationToken cancellationToken)
+		{
+			return Task.FromException<RecommendationTable>(new InvalidOperationException("decisioning test failure"));
+		}
+	}
+
+	private static RecommendationTable BuildMinimalRecommendationTable()
+	{
+		return new RecommendationTable(
+			ScenarioDescription: "Delayed recommendation",
+			ScenarioType: RecommendationScenarios.MaximizeIrrAtLe,
+			ClientSummary: "Test profile",
+			PremiumBudget: 100000m,
+			Columns:
+			[
+				new RecommendationColumn(
+					Id: "delay",
+					Label: "Delayed",
+					BaseCoverageAmount: 1000000m,
+					BaseAnnualPremium: 20000m,
+					DepositOptionPayment: 0m,
+					TotalAnnualOutlay: 20000m,
+					CashValueYear10: 0m,
+					CashValueYear5: 0m,
+					CashValueYear20: 0m,
+					CvEfficiencyYear10: 0m,
+					IrrOnCsvYear10: 0m,
+					DeathBenefitAtLeCurrent: 0m,
+					IrrAtLeCurrent: 0m,
+					DeathBenefitAtLeMinus2: 0m,
+					IrrAtLeMinus2: 0m,
+					QuickPayCurrent: 0,
+					QuickPayMinus2: 0,
+					Recommended: true,
+					ExtendedPaymentsForStress: null,
+					StressPaymentExtensionNote: "Delayed recommendation",
+					LifeExpectancyAgeUsed: 84,
+					Explain: "Delayed recommendation",
+					Warnings: []),
+			]);
 	}
 
 	private sealed class StaticDecisioningService : IDecisioningService
