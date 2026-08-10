@@ -44,3 +44,14 @@ flowchart TD
 ```bash
 dotnet test MISA_Agentic.slnx -c Release --filter "ClassName=MISA.ArchitectureTests.SseContractParityTests"
 ```
+
+## Runtime Tuning
+
+The fanout path supports bounded concurrency and timeout/fallback behavior through environment variables:
+
+- `MISA_AGENTIC_CALC_WORKER_COUNT` (default: `4`)
+- `MISA_AGENTIC_CALC_WORKER_TIMEOUT_MS` (default: `5000`)
+- `MISA_AGENTIC_CALC_BRANCH_TIMEOUT_MS` (default: `6000`)
+- `MISA_AGENTIC_KNOWLEDGE_TIMEOUT_MS` (default: `2500`)
+
+When a branch times out or fails, orchestration emits a prevalidation warning and continues with resilient fallback output.

@@ -1,5 +1,7 @@
 ﻿using Akka.Actor;
 using Akka.Configuration;
+using Akka.Pattern;
+using Akka.Routing;
 using MISA.Application;
 using MISA.Contracts;
 using Microsoft.Extensions.DependencyInjection;
@@ -112,7 +114,12 @@ internal sealed record ExecuteChat(ChatRequestDto Request);
 
 internal sealed record ChatExecutionResult(IReadOnlyList<ChatEventEnvelope> Events);
 
-internal sealed record FanoutResult(RecommendationTable Recommendation, string Knowledge);
+internal sealed record FanoutResult(
+	RecommendationTable Recommendation,
+	string Knowledge,
+	bool UsedRecommendationFallback = false,
+	bool UsedKnowledgeFallback = false,
+	IReadOnlyList<string>? Warnings = null);
 
 internal sealed class OrchestratorAgentActor : ReceiveActor
 {
@@ -120,6 +127,14 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 	private const string ClarificationRoute = "clarification";
 	private const string KnowledgeRoute = "knowledge";
 	private const string ReasoningRoute = "reasoning";
+	private const string CalcWorkerCountEnvVar = "MISA_AGENTIC_CALC_WORKER_COUNT";
+	private const string CalcWorkerTimeoutMsEnvVar = "MISA_AGENTIC_CALC_WORKER_TIMEOUT_MS";
+	private const string CalcBranchTimeoutMsEnvVar = "MISA_AGENTIC_CALC_BRANCH_TIMEOUT_MS";
+	private const string KnowledgeTimeoutMsEnvVar = "MISA_AGENTIC_KNOWLEDGE_TIMEOUT_MS";
+	private const int DefaultCalcWorkerCount = 4;
+	private const int DefaultCalcWorkerTimeoutMs = 5000;
+	private const int DefaultCalcBranchTimeoutMs = 6000;
+	private const int DefaultKnowledgeTimeoutMs = 2500;
 
 	private static readonly Regex AgePattern = new(@"\bage\s*\d{1,2}\b|\b\d{1,2}\s*(?:yo|years?|yrs?)\b|\b(?:client|insured|applicant)\s*(?:is|:)\s*\d{1,2}\b|\b\d{1,2}\s*,\s*(?:male|female|man|woman)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 	private static readonly Regex BudgetPattern = new(@"\$\s*\d|\bbudget\b|\bpremium\b|\b\d+k\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -162,13 +177,17 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		_knowledgeService = knowledgeService;
 		_decisioningService = decisioningService;
 		_sessionStore = sessionStore;
+		var calcWorkerCount = ReadPositiveIntSetting(CalcWorkerCountEnvVar, DefaultCalcWorkerCount);
+		var calcWorkerTimeout = TimeSpan.FromMilliseconds(ReadPositiveIntSetting(CalcWorkerTimeoutMsEnvVar, DefaultCalcWorkerTimeoutMs));
+		var calcBranchTimeout = TimeSpan.FromMilliseconds(ReadPositiveIntSetting(CalcBranchTimeoutMsEnvVar, DefaultCalcBranchTimeoutMs));
+		var knowledgeTimeout = TimeSpan.FromMilliseconds(ReadPositiveIntSetting(KnowledgeTimeoutMsEnvVar, DefaultKnowledgeTimeoutMs));
 		_intentAnalyzerAgent = Context.ActorOf(Props.Create(() => new IntentAnalyzerAgentActor(_agentRouter)), "intent-analyzer-agent");
 		_contextMemoryAgent = Context.ActorOf(Props.Create(() => new ContextMemoryAgentActor(_sessionStore)), "context-memory-agent");
 		_clarifierAgent = Context.ActorOf(Props.Create(() => new ClarifierAgentActor()), "clarifier-agent");
 		_illustrationPlannerAgent = Context.ActorOf(Props.Create(() => new IllustrationPlannerAgentActor()), "illustration-planner-agent");
 		_validationGuardAgent = Context.ActorOf(Props.Create(() => new ValidationGuardAgentActor()), "validation-guard-agent");
-		_calcWorkerPoolAgent = Context.ActorOf(Props.Create(() => new CalcWorkerPoolAgentActor(_decisioningService)), "calc-worker-pool-agent");
-		_fanoutDispatcherAgent = Context.ActorOf(Props.Create(() => new FanoutDispatcherAgentActor(_calcWorkerPoolAgent, _knowledgeService)), "fanout-dispatcher-agent");
+		_calcWorkerPoolAgent = Context.ActorOf(Props.Create(() => new CalcWorkerPoolAgentActor(_decisioningService, calcWorkerCount, calcWorkerTimeout)), "calc-worker-pool-agent");
+		_fanoutDispatcherAgent = Context.ActorOf(Props.Create(() => new FanoutDispatcherAgentActor(_calcWorkerPoolAgent, _knowledgeService, calcBranchTimeout, knowledgeTimeout)), "fanout-dispatcher-agent");
 		_faninAggregatorAgent = Context.ActorOf(Props.Create(() => new FaninAggregatorAgentActor()), "fanin-aggregator-agent");
 		_decisionRankerAgent = Context.ActorOf(Props.Create(() => new DecisionRankerAgentActor()), "decision-ranker-agent");
 		_responseComposerAgent = Context.ActorOf(Props.Create(() => new ResponseComposerAgentActor()), "response-composer-agent");
@@ -190,6 +209,14 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 	private sealed record AggregateFanoutCommand(FanoutResult Result);
 	private sealed record RankRecommendationCommand(RecommendationTable Recommendation);
 	private sealed record ComposeResponseCommand(RecommendationTable Recommendation, string Knowledge);
+
+	private static int ReadPositiveIntSetting(string envVarName, int defaultValue)
+	{
+		var rawValue = Environment.GetEnvironmentVariable(envVarName);
+		return int.TryParse(rawValue, out var parsed) && parsed > 0
+			? parsed
+			: defaultValue;
+	}
 
 	private async Task HandleAsync(ExecuteChat command)
 	{
@@ -358,11 +385,22 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		var faninResult = await _faninAggregatorAgent
 			.Ask<FanoutResult>(new AggregateFanoutCommand(fanoutResult), cancellationToken)
 			.ConfigureAwait(false);
+		if (faninResult.Warnings is { Count: > 0 })
+		{
+			events.Add(ChatEventEnvelope.Text(
+				ChatEventType.Prevalidation,
+				BuildFallbackWarningMessage(faninResult.Warnings)));
+		}
+
 		var rankedRecommendation = await _decisionRankerAgent
 			.Ask<RecommendationTable>(new RankRecommendationCommand(faninResult.Recommendation), cancellationToken)
 			.ConfigureAwait(false);
 
-		events.Add(ChatEventEnvelope.Text(ChatEventType.Progress, "Received successful results. Comparing and ranking..."));
+		events.Add(ChatEventEnvelope.Text(
+			ChatEventType.Progress,
+			faninResult.Warnings is { Count: > 0 }
+				? "Received partial results. Applying fallback ranking..."
+				: "Received successful results. Comparing and ranking..."));
 
 		var composedEvent = await _responseComposerAgent
 			.Ask<ChatEventEnvelope>(new ComposeResponseCommand(rankedRecommendation, faninResult.Knowledge), cancellationToken)
@@ -375,6 +413,21 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		}
 
 		return events;
+	}
+
+	private static string BuildFallbackWarningMessage(IReadOnlyList<string> warnings)
+	{
+		var lines = new List<string>
+		{
+			"Resiliency fallback was activated for this request:"
+		};
+
+		foreach (var warning in warnings)
+		{
+			lines.Add($"- {warning}");
+		}
+
+		return string.Join("\n", lines);
 	}
 
 	private sealed class IntentAnalyzerAgentActor : ReceiveActor
@@ -453,9 +506,34 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 
 	private sealed class CalcWorkerPoolAgentActor : ReceiveActor
 	{
+		private readonly IActorRef _calcWorkerRouter;
+		private readonly TimeSpan _workerAskTimeout;
+
+		public CalcWorkerPoolAgentActor(IDecisioningService decisioningService, int workerCount, TimeSpan workerAskTimeout)
+		{
+			_workerAskTimeout = workerAskTimeout;
+			_calcWorkerRouter = Context.ActorOf(
+				new RoundRobinPool(workerCount)
+					.Props(Props.Create(() => new CalcWorkerAgentActor(decisioningService))),
+				"calc-worker-router");
+
+			Receive<ExecuteCalculationCommand>(Handle);
+		}
+
+		private void Handle(ExecuteCalculationCommand command)
+		{
+			var replyTo = Sender;
+			_calcWorkerRouter
+				.Ask<RecommendationTable>(command, _workerAskTimeout)
+				.PipeTo(replyTo, Self);
+		}
+	}
+
+	private sealed class CalcWorkerAgentActor : ReceiveActor
+	{
 		private readonly IDecisioningService _decisioningService;
 
-		public CalcWorkerPoolAgentActor(IDecisioningService decisioningService)
+		public CalcWorkerAgentActor(IDecisioningService decisioningService)
 		{
 			_decisioningService = decisioningService;
 			ReceiveAsync<ExecuteCalculationCommand>(HandleAsync);
@@ -475,22 +553,145 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 	{
 		private readonly IActorRef _calcWorkerPoolAgent;
 		private readonly IKnowledgeService _knowledgeService;
+		private readonly TimeSpan _calcBranchTimeout;
+		private readonly TimeSpan _knowledgeTimeout;
+		private const string FallbackKnowledgeMessage = "Supporting knowledge is temporarily unavailable; recommendation output was generated using fallback resiliency mode.";
 
-		public FanoutDispatcherAgentActor(IActorRef calcWorkerPoolAgent, IKnowledgeService knowledgeService)
+		public FanoutDispatcherAgentActor(
+			IActorRef calcWorkerPoolAgent,
+			IKnowledgeService knowledgeService,
+			TimeSpan calcBranchTimeout,
+			TimeSpan knowledgeTimeout)
 		{
 			_calcWorkerPoolAgent = calcWorkerPoolAgent;
 			_knowledgeService = knowledgeService;
+			_calcBranchTimeout = calcBranchTimeout;
+			_knowledgeTimeout = knowledgeTimeout;
 			ReceiveAsync<DispatchFanoutCommand>(HandleAsync);
 		}
+
+		private readonly record struct BranchAttempt<T>(bool Succeeded, T? Value, string? ErrorMessage);
 
 		private async Task HandleAsync(DispatchFanoutCommand command)
 		{
 			var replyTo = Sender;
-			var recommendationTask = _calcWorkerPoolAgent.Ask<RecommendationTable>(new ExecuteCalculationCommand(command.Request), CancellationToken.None);
+			var recommendationTask = _calcWorkerPoolAgent.Ask<RecommendationTable>(new ExecuteCalculationCommand(command.Request), _calcBranchTimeout, CancellationToken.None);
 			var knowledgeTask = _knowledgeService.AnswerAsync(command.Request, CancellationToken.None);
-			await Task.WhenAll(recommendationTask, knowledgeTask).ConfigureAwait(false);
 
-			replyTo.Tell(new FanoutResult(recommendationTask.Result, knowledgeTask.Result));
+			var recommendationAttemptTask = TryResolveBranchAsync(recommendationTask, "calculation branch");
+			var knowledgeAttemptTask = TryResolveBranchAsync(knowledgeTask, _knowledgeTimeout, "knowledge branch");
+			await Task.WhenAll(recommendationAttemptTask, knowledgeAttemptTask).ConfigureAwait(false);
+
+			var recommendationAttempt = recommendationAttemptTask.Result;
+			var knowledgeAttempt = knowledgeAttemptTask.Result;
+			var warnings = new List<string>();
+			var usedRecommendationFallback = false;
+			var usedKnowledgeFallback = false;
+
+			var recommendation = recommendationAttempt.Succeeded
+				? recommendationAttempt.Value!
+				: BuildFallbackRecommendation(command.Request);
+
+			if (!recommendationAttempt.Succeeded)
+			{
+				usedRecommendationFallback = true;
+				warnings.Add(recommendationAttempt.ErrorMessage ?? "calculation branch failed and fallback recommendation was applied.");
+			}
+
+			var knowledge = knowledgeAttempt.Succeeded
+				? knowledgeAttempt.Value!
+				: FallbackKnowledgeMessage;
+
+			if (!knowledgeAttempt.Succeeded)
+			{
+				usedKnowledgeFallback = true;
+				warnings.Add(knowledgeAttempt.ErrorMessage ?? "knowledge branch failed and fallback knowledge note was applied.");
+			}
+
+			replyTo.Tell(new FanoutResult(
+				recommendation,
+				knowledge,
+				UsedRecommendationFallback: usedRecommendationFallback,
+				UsedKnowledgeFallback: usedKnowledgeFallback,
+				Warnings: warnings));
+		}
+
+		private static async Task<BranchAttempt<T>> TryResolveBranchAsync<T>(Task<T> branchTask, TimeSpan timeout, string branchName)
+		{
+			var timeoutTask = Task.Delay(timeout);
+			var completedTask = await Task.WhenAny(branchTask, timeoutTask).ConfigureAwait(false);
+
+			if (!ReferenceEquals(completedTask, branchTask))
+			{
+				return new BranchAttempt<T>(false, default, $"{branchName} timed out after {timeout.TotalMilliseconds:N0} ms.");
+			}
+
+			try
+			{
+				var value = await branchTask.ConfigureAwait(false);
+				return new BranchAttempt<T>(true, value, null);
+			}
+			catch (Exception ex)
+			{
+				return new BranchAttempt<T>(false, default, $"{branchName} failed: {ex.GetBaseException().Message}");
+			}
+		}
+
+		private static async Task<BranchAttempt<T>> TryResolveBranchAsync<T>(Task<T> branchTask, string branchName)
+		{
+			try
+			{
+				var value = await branchTask.ConfigureAwait(false);
+				return new BranchAttempt<T>(true, value, null);
+			}
+			catch (Exception ex)
+			{
+				return new BranchAttempt<T>(false, default, $"{branchName} failed: {ex.GetBaseException().Message}");
+			}
+		}
+
+		private static RecommendationTable BuildFallbackRecommendation(ChatRequestDto request)
+		{
+			const decimal fallbackBudget = 100000m;
+			const int fallbackLifeExpectancy = 84;
+
+			var column = new RecommendationColumn(
+				Id: "fallback-plan",
+				Label: "Fallback Plan (review required)",
+				BaseCoverageAmount: 1000000m,
+				BaseAnnualPremium: 20000m,
+				DepositOptionPayment: 0m,
+				TotalAnnualOutlay: 20000m,
+				CashValueYear10: 0m,
+				CashValueYear5: 0m,
+				CashValueYear20: 0m,
+				CvEfficiencyYear10: 0m,
+				IrrOnCsvYear10: 0m,
+				DeathBenefitAtLeCurrent: 0m,
+				IrrAtLeCurrent: 0m,
+				DeathBenefitAtLeMinus2: 0m,
+				IrrAtLeMinus2: 0m,
+				QuickPayCurrent: 0,
+				QuickPayMinus2: 0,
+				Recommended: true,
+				ExtendedPaymentsForStress: null,
+				StressPaymentExtensionNote: "Fallback recommendation generated due to branch timeout/failure.",
+				LifeExpectancyAgeUsed: fallbackLifeExpectancy,
+				Explain: "Fallback recommendation generated from resilient execution path.",
+				Warnings:
+				[
+					"Fallback recommendation generated due to branch timeout/failure."
+				]);
+
+			return new RecommendationTable(
+				ScenarioDescription: "Fallback recommendation (partial execution)",
+				ScenarioType: RecommendationScenarios.MaximizeIrrAtLe,
+				ClientSummary: string.IsNullOrWhiteSpace(request.Message) ? "Fallback profile" : "Fallback profile derived from resilient execution",
+				PremiumBudget: fallbackBudget,
+				Columns:
+				[
+					column
+				]);
 		}
 	}
 
