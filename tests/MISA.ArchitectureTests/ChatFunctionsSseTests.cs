@@ -149,6 +149,23 @@ public sealed class ChatFunctionsSseTests
 		Assert.DoesNotContain("MCP knowledge response", disabledBody, StringComparison.Ordinal);
 	}
 
+	[Fact]
+	public async Task ChatWithKnowledgeMcpFailureFallsBackWithoutErrorEvent()
+	{
+		var failingFunctions = CreateConfiguredChatFunctions(
+			knowledgeMcpEnabled: true,
+			new FailingMcpToolBroker());
+
+		var requestBody = "{\"message\":\"hello there\",\"sessionId\":\"session-func-config-mcp-failure\"}";
+		var response = await failingFunctions.Chat(CreateRequest(requestBody));
+		var body = await ReadBodyAsStringAsync(response);
+
+		Assert.Equal(["thinking", "thinking", "result"], ExtractEventTypes(body));
+		Assert.DoesNotContain("event: error", body, StringComparison.Ordinal);
+		Assert.DoesNotContain("MCP knowledge response", body, StringComparison.Ordinal);
+		Assert.Contains("internal-kb/runtime/general-illustration-guidance", body, StringComparison.Ordinal);
+	}
+
 	private static TestHttpRequestData CreateRequest(
 		string bodyJson,
 		string method = "POST",
@@ -279,6 +296,14 @@ public sealed class ChatFunctionsSseTests
 		public Task<McpToolCallResult> InvokeAsync(McpToolCallRequest request, CancellationToken cancellationToken)
 		{
 			throw new InvalidOperationException("MCP broker should not be called when knowledge MCP is disabled.");
+		}
+	}
+
+	private sealed class FailingMcpToolBroker : IMcpToolBroker
+	{
+		public Task<McpToolCallResult> InvokeAsync(McpToolCallRequest request, CancellationToken cancellationToken)
+		{
+			return Task.FromResult(McpToolCallResult.Failed("timeout", "simulated timeout", TimeSpan.FromMilliseconds(200)));
 		}
 	}
 
