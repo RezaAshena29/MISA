@@ -185,6 +185,24 @@ public sealed class ChatFunctionsSseTests
 		Assert.DoesNotContain("secret contact", body, StringComparison.OrdinalIgnoreCase);
 	}
 
+	[Fact]
+	public async Task ChatWithKnowledgeMalformedMcpPayloadFallsBackWithoutErrorEvent()
+	{
+		var functions = CreateConfiguredChatFunctions(
+			knowledgeMcpEnabled: true,
+			new MalformedPayloadMcpToolBroker());
+
+		var requestBody = "{\"message\":\"what is participating policy\",\"sessionId\":\"session-func-config-mcp-malformed\"}";
+		var response = await functions.Chat(CreateRequest(requestBody));
+		var body = await ReadBodyAsStringAsync(response);
+
+		Assert.Equal(["thinking", "thinking", "result"], ExtractEventTypes(body));
+		Assert.DoesNotContain("event: error", body, StringComparison.Ordinal);
+		Assert.Contains("\"type\":\"result\"", body, StringComparison.Ordinal);
+		Assert.DoesNotContain("invalid_payload", body, StringComparison.OrdinalIgnoreCase);
+		Assert.DoesNotContain("response JSON was malformed", body, StringComparison.OrdinalIgnoreCase);
+	}
+
 	private static TestHttpRequestData CreateRequest(
 		string bodyJson,
 		string method = "POST",
@@ -323,6 +341,14 @@ public sealed class ChatFunctionsSseTests
 		public Task<McpToolCallResult> InvokeAsync(McpToolCallRequest request, CancellationToken cancellationToken)
 		{
 			return Task.FromResult(McpToolCallResult.Failed("timeout", "simulated timeout", TimeSpan.FromMilliseconds(200)));
+		}
+	}
+
+	private sealed class MalformedPayloadMcpToolBroker : IMcpToolBroker
+	{
+		public Task<McpToolCallResult> InvokeAsync(McpToolCallRequest request, CancellationToken cancellationToken)
+		{
+			return Task.FromResult(McpToolCallResult.Failed("invalid_payload", "response JSON was malformed", TimeSpan.FromMilliseconds(120)));
 		}
 	}
 
