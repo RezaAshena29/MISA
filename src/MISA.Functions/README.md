@@ -36,6 +36,7 @@ Both templates configure:
 
 - `Misa:Mcp` for global MCP broker behavior (enable flag, base URL, allowlist, and timeouts).
 - `Misa:Mcp:Knowledge` for knowledge-route MCP decorator behavior.
+- `Misa:Mcp:Decisioning` for illustration-route recommendation table MCP behavior.
 
 Recommended rollout flow:
 

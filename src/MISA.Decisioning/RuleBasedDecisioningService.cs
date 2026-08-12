@@ -1,10 +1,12 @@
 ﻿using MISA.Application;
 using MISA.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace MISA.Decisioning;
@@ -605,6 +607,100 @@ public sealed class RuleBasedDecisioningService : IDecisioningService
 }
 
 /// <summary>
+/// Decisioning module MCP feature flags.
+/// </summary>
+public sealed class DecisioningMcpOptions
+{
+	/// <summary>
+	/// Enables MCP for illustration recommendation tables.
+	/// </summary>
+	public bool Enabled { get; set; }
+
+	/// <summary>
+	/// MCP tool name used for recommendation table generation.
+	/// </summary>
+	public string RecommendationTableToolName { get; set; } = "decisioning.recommendation.table";
+}
+
+/// <summary>
+/// Decorates decisioning service with optional MCP-based table generation.
+/// </summary>
+public sealed class McpDecisioningServiceDecorator : IDecisioningService
+{
+	private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+	{
+		PropertyNameCaseInsensitive = true
+	};
+
+	private readonly RuleBasedDecisioningService _inner;
+	private readonly IMcpToolBroker _mcpToolBroker;
+	private readonly IOptions<DecisioningMcpOptions> _options;
+
+	/// <summary>
+	/// Creates MCP-enabled decisioning service decorator.
+	/// </summary>
+	public McpDecisioningServiceDecorator(
+		RuleBasedDecisioningService inner,
+		IMcpToolBroker mcpToolBroker,
+		IOptions<DecisioningMcpOptions> options)
+	{
+		_inner = inner;
+		_mcpToolBroker = mcpToolBroker;
+		_options = options;
+	}
+
+	/// <inheritdoc />
+	public Task<string> BuildRecommendationAsync(ChatRequestDto request, CancellationToken cancellationToken)
+	{
+		return _inner.BuildRecommendationAsync(request, cancellationToken);
+	}
+
+	/// <inheritdoc />
+	public async Task<RecommendationTable> BuildRecommendationTableAsync(ChatRequestDto request, CancellationToken cancellationToken)
+	{
+		if (!_options.Value.Enabled)
+		{
+			return await _inner.BuildRecommendationTableAsync(request, cancellationToken).ConfigureAwait(false);
+		}
+
+		var result = await _mcpToolBroker
+			.InvokeAsync(
+				new McpToolCallRequest(
+					Route: "illustration",
+					ToolName: _options.Value.RecommendationTableToolName,
+					SessionId: request.SessionId,
+					Input: request.Message,
+					Attributes: new Dictionary<string, string?>
+					{
+						["product"] = request.Product,
+						["language"] = request.Language
+					}),
+				cancellationToken)
+			.ConfigureAwait(false);
+
+		if (!result.Success || string.IsNullOrWhiteSpace(result.Content))
+		{
+			return await _inner.BuildRecommendationTableAsync(request, cancellationToken).ConfigureAwait(false);
+		}
+
+		try
+		{
+			var table = JsonSerializer.Deserialize<RecommendationTable>(result.Content, JsonOptions);
+			if (table is not null && table.Columns.Count > 0)
+			{
+				return table;
+			}
+		}
+		catch (JsonException)
+		{
+			// Fall through to deterministic local decisioning when payload cannot be parsed.
+		}
+
+		return await _inner.BuildRecommendationTableAsync(request, cancellationToken).ConfigureAwait(false);
+	}
+}
+
+/// <summary>
 /// Registers decisioning services.
 /// </summary>
 public static class DecisioningServiceCollectionExtensions
@@ -614,7 +710,10 @@ public static class DecisioningServiceCollectionExtensions
 	/// </summary>
 	public static IServiceCollection AddMisaDecisioning(this IServiceCollection services)
 	{
-		services.AddSingleton<IDecisioningService, RuleBasedDecisioningService>();
+		services.AddOptions<DecisioningMcpOptions>()
+			.BindConfiguration("Misa:Mcp:Decisioning");
+		services.AddSingleton<RuleBasedDecisioningService>();
+		services.AddSingleton<IDecisioningService, McpDecisioningServiceDecorator>();
 		return services;
 	}
 }

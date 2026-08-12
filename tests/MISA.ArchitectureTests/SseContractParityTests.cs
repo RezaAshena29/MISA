@@ -1,5 +1,6 @@
 using MISA.Application;
 using MISA.Contracts;
+using MISA.Decisioning;
 using MISA.Infrastructure;
 using MISA.Knowledge;
 using MISA.Orchestration.Akka;
@@ -278,6 +279,79 @@ public sealed class SseContractParityTests
 	}
 
 	[Fact]
+	public async Task IllustrationRouteWithDecisioningMcpEnabledKeepsEventShape()
+	{
+		var mcpTableJson = System.Text.Json.JsonSerializer.Serialize(BuildMcpDecisioningTable());
+		var decisioning = new McpDecisioningServiceDecorator(
+			new RuleBasedDecisioningService(),
+			new StaticMcpToolBroker(McpToolCallResult.Succeeded(mcpTableJson, TimeSpan.FromMilliseconds(10))),
+			Options.Create(new DecisioningMcpOptions
+			{
+				Enabled = true,
+				RecommendationTableToolName = "decisioning.recommendation.table"
+			}));
+
+		await using var runtime = new AkkaClusterExecutionRuntime(
+			new FixedRouteRouter("illustration"),
+			new StaticKnowledgeService(),
+			decisioning,
+			new InMemoryChatSessionStore(),
+			NullLogger<AkkaClusterExecutionRuntime>.Instance);
+
+		var request = new ChatRequestDto("male age 45 non-smoker budget $100k", "session-illustration-mcp-decisioning");
+		var events = await CollectAsync(runtime.ExecuteAsync(request, CancellationToken.None));
+
+		Assert.True(events.Count >= 6);
+		Assert.Equal(ChatEventType.Thinking, events[0].Type);
+		Assert.Equal(ChatEventType.Result, events[^1].Type);
+		Assert.Contains("MCP decisioning scenario", EventContent(events[^1]), StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public async Task IllustrationRouteDecisioningMcpDisabledAndFailedKeepSameEventSequence()
+	{
+		var disabledDecisioning = new McpDecisioningServiceDecorator(
+			new RuleBasedDecisioningService(),
+			new ThrowingMcpToolBroker(),
+			Options.Create(new DecisioningMcpOptions
+			{
+				Enabled = false,
+				RecommendationTableToolName = "decisioning.recommendation.table"
+			}));
+
+		var failedDecisioning = new McpDecisioningServiceDecorator(
+			new RuleBasedDecisioningService(),
+			new StaticMcpToolBroker(McpToolCallResult.Failed("invalid_payload", "malformed table payload", TimeSpan.FromMilliseconds(8))),
+			Options.Create(new DecisioningMcpOptions
+			{
+				Enabled = true,
+				RecommendationTableToolName = "decisioning.recommendation.table"
+			}));
+
+		await using var disabledRuntime = new AkkaClusterExecutionRuntime(
+			new FixedRouteRouter("illustration"),
+			new StaticKnowledgeService(),
+			disabledDecisioning,
+			new InMemoryChatSessionStore(),
+			NullLogger<AkkaClusterExecutionRuntime>.Instance);
+
+		await using var failedRuntime = new AkkaClusterExecutionRuntime(
+			new FixedRouteRouter("illustration"),
+			new StaticKnowledgeService(),
+			failedDecisioning,
+			new InMemoryChatSessionStore(),
+			NullLogger<AkkaClusterExecutionRuntime>.Instance);
+
+		var request = new ChatRequestDto("male age 45 non-smoker budget $100k", "session-illustration-mcp-decisioning-failed");
+		var disabledEvents = await CollectAsync(disabledRuntime.ExecuteAsync(request, CancellationToken.None));
+		var failedEvents = await CollectAsync(failedRuntime.ExecuteAsync(request, CancellationToken.None));
+
+		Assert.Equal(disabledEvents.Count, failedEvents.Count);
+		Assert.Equal(disabledEvents.Select(evt => evt.Type), failedEvents.Select(evt => evt.Type));
+		Assert.DoesNotContain(failedEvents, evt => evt.Type == ChatEventType.Error);
+	}
+
+	[Fact]
 	public async Task ReasoningRouteWithoutPriorRecommendationReturnsFallbackExplanation()
 	{
 		await using var runtime = new AkkaClusterExecutionRuntime(
@@ -472,6 +546,42 @@ public sealed class SseContractParityTests
 					StressPaymentExtensionNote: "Delayed recommendation",
 					LifeExpectancyAgeUsed: 84,
 					Explain: "Delayed recommendation",
+					Warnings: []),
+			]);
+	}
+
+	private static RecommendationTable BuildMcpDecisioningTable()
+	{
+		return new RecommendationTable(
+			ScenarioDescription: "MCP decisioning scenario",
+			ScenarioType: RecommendationScenarios.MaximizeIrrAtLe,
+			ClientSummary: "MCP generated profile",
+			PremiumBudget: 100000m,
+			Columns:
+			[
+				new RecommendationColumn(
+					Id: "mcp-pay90",
+					Label: "MCP Pay 90",
+					BaseCoverageAmount: 1200000m,
+					BaseAnnualPremium: 21000m,
+					DepositOptionPayment: 0m,
+					TotalAnnualOutlay: 21000m,
+					CashValueYear10: 300000m,
+					CashValueYear5: 120000m,
+					CashValueYear20: 700000m,
+					CvEfficiencyYear10: 103.4m,
+					IrrOnCsvYear10: 6.9m,
+					DeathBenefitAtLeCurrent: 2500000m,
+					IrrAtLeCurrent: 5.1m,
+					DeathBenefitAtLeMinus2: 2000000m,
+					IrrAtLeMinus2: 4.3m,
+					QuickPayCurrent: 9,
+					QuickPayMinus2: 11,
+					Recommended: true,
+					ExtendedPaymentsForStress: null,
+					StressPaymentExtensionNote: null,
+					LifeExpectancyAgeUsed: 84,
+					Explain: "MCP-backed recommendation",
 					Warnings: []),
 			]);
 	}
