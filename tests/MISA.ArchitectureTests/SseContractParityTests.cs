@@ -1,8 +1,10 @@
 using MISA.Application;
 using MISA.Contracts;
 using MISA.Infrastructure;
+using MISA.Knowledge;
 using MISA.Orchestration.Akka;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace MISA.ArchitectureTests;
 
@@ -205,6 +207,77 @@ public sealed class SseContractParityTests
 	}
 
 	[Fact]
+	public async Task KnowledgeRouteWithMcpEnabledStillProducesThinkingThenResult()
+	{
+		var knowledgeService = new McpKnowledgeServiceDecorator(
+			new KnowledgeService(),
+			new StaticMcpToolBroker(McpToolCallResult.Succeeded("MCP knowledge response", TimeSpan.FromMilliseconds(10))),
+			Options.Create(new KnowledgeMcpOptions
+			{
+				Enabled = true,
+				ToolName = "knowledge.answer"
+			}));
+
+		await using var runtime = new AkkaClusterExecutionRuntime(
+			new FixedRouteRouter("knowledge"),
+			knowledgeService,
+			new StaticDecisioningService(),
+			new InMemoryChatSessionStore(),
+			NullLogger<AkkaClusterExecutionRuntime>.Instance);
+
+		var request = new ChatRequestDto("what is participating policy", "session-knowledge-mcp-enabled");
+		var events = await CollectAsync(runtime.ExecuteAsync(request, CancellationToken.None));
+
+		Assert.Equal(2, events.Count);
+		Assert.Equal(ChatEventType.Thinking, events[0].Type);
+		Assert.Equal(ChatEventType.Result, events[1].Type);
+		Assert.Equal("MCP knowledge response", events[1].Content);
+	}
+
+	[Fact]
+	public async Task KnowledgeRouteMcpDisabledAndEnabledKeepSameEventSequence()
+	{
+		var disabledKnowledge = new McpKnowledgeServiceDecorator(
+			new KnowledgeService(),
+			new ThrowingMcpToolBroker(),
+			Options.Create(new KnowledgeMcpOptions
+			{
+				Enabled = false,
+				ToolName = "knowledge.answer"
+			}));
+
+		var enabledKnowledge = new McpKnowledgeServiceDecorator(
+			new KnowledgeService(),
+			new StaticMcpToolBroker(McpToolCallResult.Succeeded("MCP knowledge response", TimeSpan.FromMilliseconds(12))),
+			Options.Create(new KnowledgeMcpOptions
+			{
+				Enabled = true,
+				ToolName = "knowledge.answer"
+			}));
+
+		await using var disabledRuntime = new AkkaClusterExecutionRuntime(
+			new FixedRouteRouter("knowledge"),
+			disabledKnowledge,
+			new StaticDecisioningService(),
+			new InMemoryChatSessionStore(),
+			NullLogger<AkkaClusterExecutionRuntime>.Instance);
+
+		await using var enabledRuntime = new AkkaClusterExecutionRuntime(
+			new FixedRouteRouter("knowledge"),
+			enabledKnowledge,
+			new StaticDecisioningService(),
+			new InMemoryChatSessionStore(),
+			NullLogger<AkkaClusterExecutionRuntime>.Instance);
+
+		var request = new ChatRequestDto("what is participating policy", "session-knowledge-mcp-parity");
+		var disabledEvents = await CollectAsync(disabledRuntime.ExecuteAsync(request, CancellationToken.None));
+		var enabledEvents = await CollectAsync(enabledRuntime.ExecuteAsync(request, CancellationToken.None));
+
+		Assert.Equal(disabledEvents.Count, enabledEvents.Count);
+		Assert.Equal(disabledEvents.Select(evt => evt.Type), enabledEvents.Select(evt => evt.Type));
+	}
+
+	[Fact]
 	public async Task ReasoningRouteWithoutPriorRecommendationReturnsFallbackExplanation()
 	{
 		await using var runtime = new AkkaClusterExecutionRuntime(
@@ -282,6 +355,29 @@ public sealed class SseContractParityTests
 		public Task<string> AnswerAsync(ChatRequestDto request, CancellationToken cancellationToken)
 		{
 			return Task.FromResult("Knowledge reference for contract test.");
+		}
+	}
+
+	private sealed class StaticMcpToolBroker : IMcpToolBroker
+	{
+		private readonly McpToolCallResult _result;
+
+		public StaticMcpToolBroker(McpToolCallResult result)
+		{
+			_result = result;
+		}
+
+		public Task<McpToolCallResult> InvokeAsync(McpToolCallRequest request, CancellationToken cancellationToken)
+		{
+			return Task.FromResult(_result);
+		}
+	}
+
+	private sealed class ThrowingMcpToolBroker : IMcpToolBroker
+	{
+		public Task<McpToolCallResult> InvokeAsync(McpToolCallRequest request, CancellationToken cancellationToken)
+		{
+			throw new InvalidOperationException("MCP broker must not be called when Knowledge MCP is disabled.");
 		}
 	}
 
