@@ -87,6 +87,42 @@ public sealed class ChatFunctionsSseTests
 		Assert.Contains("\"cleared\":true", body, StringComparison.OrdinalIgnoreCase);
 	}
 
+	[Fact]
+	public async Task ChatKeepsSseEventSequenceParityForBaselineAndMcpLikeKnowledgeOutputs()
+	{
+		var baselineFunctions = new ChatFunctions(
+			new StaticPipeline(
+			[
+				ChatEventEnvelope.Text(ChatEventType.Thinking, "Looking this up in the knowledge base..."),
+				ChatEventEnvelope.Text(ChatEventType.Result, "Baseline knowledge response")
+			]),
+			new InMemoryChatSessionStore(),
+			NullLogger<ChatFunctions>.Instance);
+
+		var mcpLikeFunctions = new ChatFunctions(
+			new StaticPipeline(
+			[
+				ChatEventEnvelope.Text(ChatEventType.Thinking, "Looking this up in the knowledge base..."),
+				ChatEventEnvelope.Text(ChatEventType.Result, "MCP knowledge response")
+			]),
+			new InMemoryChatSessionStore(),
+			NullLogger<ChatFunctions>.Instance);
+
+		var requestBody = "{\"message\":\"what is participating policy\",\"sessionId\":\"session-func-parity\"}";
+		var baselineResponse = await baselineFunctions.Chat(CreateRequest(requestBody));
+		var mcpLikeResponse = await mcpLikeFunctions.Chat(CreateRequest(requestBody));
+
+		var baselineBody = await ReadBodyAsStringAsync(baselineResponse);
+		var mcpLikeBody = await ReadBodyAsStringAsync(mcpLikeResponse);
+
+		Assert.Equal(ExtractEventTypes(baselineBody), ExtractEventTypes(mcpLikeBody));
+		Assert.Equal(["thinking", "result"], ExtractEventTypes(mcpLikeBody));
+		Assert.Contains("\"type\":\"thinking\"", baselineBody, StringComparison.Ordinal);
+		Assert.Contains("\"type\":\"result\"", baselineBody, StringComparison.Ordinal);
+		Assert.Contains("\"type\":\"thinking\"", mcpLikeBody, StringComparison.Ordinal);
+		Assert.Contains("\"type\":\"result\"", mcpLikeBody, StringComparison.Ordinal);
+	}
+
 	private static TestHttpRequestData CreateRequest(
 		string bodyJson,
 		string method = "POST",
@@ -102,6 +138,15 @@ public sealed class ChatFunctionsSseTests
 		response.Body.Position = 0;
 		using var reader = new StreamReader(response.Body, Encoding.UTF8, leaveOpen: true);
 		return await reader.ReadToEndAsync();
+	}
+
+	private static List<string> ExtractEventTypes(string sseBody)
+	{
+		return sseBody
+			.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+			.Where(line => line.StartsWith("event: ", StringComparison.Ordinal))
+			.Select(line => line[7..].Trim())
+			.ToList();
 	}
 
 	private sealed class StaticPipeline : IChatPipeline
