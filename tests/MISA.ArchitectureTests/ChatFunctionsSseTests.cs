@@ -166,6 +166,25 @@ public sealed class ChatFunctionsSseTests
 		Assert.Contains("internal-kb/runtime/general-illustration-guidance", body, StringComparison.Ordinal);
 	}
 
+	[Fact]
+	public async Task ChatWithKnowledgeMcpEnabledMasksSensitiveMcpOutput()
+	{
+		var functions = CreateConfiguredChatFunctions(
+			knowledgeMcpEnabled: true,
+			new StaticMcpToolBroker("secret contact user@example.com call +1 555 444 3322"));
+
+		var requestBody = "{\"message\":\"what is participating policy\",\"sessionId\":\"session-func-config-mcp-mask\"}";
+		var response = await functions.Chat(CreateRequest(requestBody));
+		var body = await ReadBodyAsStringAsync(response);
+
+		Assert.Equal(["thinking", "thinking", "result"], ExtractEventTypes(body));
+		Assert.Contains("[redacted]", body, StringComparison.Ordinal);
+		Assert.Contains("[redacted-email]", body, StringComparison.Ordinal);
+		Assert.Contains("[redacted-phone]", body, StringComparison.Ordinal);
+		Assert.DoesNotContain("user@example.com", body, StringComparison.OrdinalIgnoreCase);
+		Assert.DoesNotContain("secret contact", body, StringComparison.OrdinalIgnoreCase);
+	}
+
 	private static TestHttpRequestData CreateRequest(
 		string bodyJson,
 		string method = "POST",
