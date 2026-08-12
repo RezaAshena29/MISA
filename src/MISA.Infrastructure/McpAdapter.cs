@@ -232,6 +232,13 @@ public sealed class RemoteHttpMcpToolBroker : IMcpToolBroker
 			DurationMs.Record(sw.Elapsed.TotalMilliseconds, tags);
 			return McpToolCallResult.Failed("transport_error", ex.Message, sw.Elapsed);
 		}
+		catch (JsonException ex)
+		{
+			sw.Stop();
+			FailureCounter.Add(1, tags);
+			DurationMs.Record(sw.Elapsed.TotalMilliseconds, tags);
+			return McpToolCallResult.Failed("invalid_payload", ex.Message, sw.Elapsed);
+		}
 	}
 
 	private static KeyValuePair<string, object?>[] CreateTags(McpToolCallRequest request)
