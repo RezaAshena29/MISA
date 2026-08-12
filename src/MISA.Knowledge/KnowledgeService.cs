@@ -1,6 +1,7 @@
 ﻿using MISA.Application;
 using MISA.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 
@@ -87,6 +88,76 @@ public sealed class KnowledgeService : IKnowledgeService
 }
 
 /// <summary>
+/// Knowledge module MCP feature flags.
+/// </summary>
+public sealed class KnowledgeMcpOptions
+{
+	/// <summary>
+	/// Enables MCP for knowledge route answers.
+	/// </summary>
+	public bool Enabled { get; set; }
+
+	/// <summary>
+	/// MCP tool name used for knowledge responses.
+	/// </summary>
+	public string ToolName { get; set; } = "knowledge.answer";
+}
+
+/// <summary>
+/// Decorates knowledge service with optional MCP-based response path.
+/// </summary>
+public sealed class McpKnowledgeServiceDecorator : IKnowledgeService
+{
+	private readonly KnowledgeService _inner;
+	private readonly IMcpToolBroker _mcpToolBroker;
+	private readonly IOptions<KnowledgeMcpOptions> _options;
+
+	/// <summary>
+	/// Creates MCP-enabled knowledge service decorator.
+	/// </summary>
+	public McpKnowledgeServiceDecorator(
+		KnowledgeService inner,
+		IMcpToolBroker mcpToolBroker,
+		IOptions<KnowledgeMcpOptions> options)
+	{
+		_inner = inner;
+		_mcpToolBroker = mcpToolBroker;
+		_options = options;
+	}
+
+	/// <inheritdoc />
+	public async Task<string> AnswerAsync(ChatRequestDto request, CancellationToken cancellationToken)
+	{
+		if (!_options.Value.Enabled)
+		{
+			return await _inner.AnswerAsync(request, cancellationToken).ConfigureAwait(false);
+		}
+
+		var result = await _mcpToolBroker
+			.InvokeAsync(
+				new McpToolCallRequest(
+					Route: "knowledge",
+					ToolName: _options.Value.ToolName,
+					SessionId: request.SessionId,
+					Input: request.Message,
+					Attributes: new Dictionary<string, string?>
+					{
+						["product"] = request.Product,
+						["language"] = request.Language
+					}),
+				cancellationToken)
+			.ConfigureAwait(false);
+
+		if (result.Success && !string.IsNullOrWhiteSpace(result.Content))
+		{
+			return result.Content;
+		}
+
+		return await _inner.AnswerAsync(request, cancellationToken).ConfigureAwait(false);
+	}
+}
+
+/// <summary>
 /// Registers knowledge services.
 /// </summary>
 public static class KnowledgeServiceCollectionExtensions
@@ -96,7 +167,10 @@ public static class KnowledgeServiceCollectionExtensions
 	/// </summary>
 	public static IServiceCollection AddMisaKnowledge(this IServiceCollection services)
 	{
-		services.AddSingleton<IKnowledgeService, KnowledgeService>();
+		services.AddOptions<KnowledgeMcpOptions>()
+			.BindConfiguration("Misa:Mcp:Knowledge");
+		services.AddSingleton<KnowledgeService>();
+		services.AddSingleton<IKnowledgeService, McpKnowledgeServiceDecorator>();
 		return services;
 	}
 }

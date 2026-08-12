@@ -203,6 +203,7 @@ public static class InfrastructureServiceCollectionExtensions
 		this IServiceCollection services,
 		IConfiguration configuration)
 	{
+		services.AddMisaMcp(configuration);
 		services.AddOptions<GuardOptions>().Bind(configuration.GetSection("Misa:Guard"));
 		services.AddOptions<SessionStoreOptions>().Bind(configuration.GetSection("Misa:SessionStore"));
 		services.AddSingleton<IPromptGuard, DefaultPromptGuard>();

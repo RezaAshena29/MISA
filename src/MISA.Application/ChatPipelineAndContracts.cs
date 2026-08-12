@@ -288,7 +288,24 @@ public static class ApplicationServiceCollectionExtensions
 	/// </summary>
 	public static IServiceCollection AddMisaApplication(this IServiceCollection services)
 	{
+		services.AddSingleton<IMcpToolBroker, NullMcpToolBroker>();
 		services.AddScoped<IChatPipeline, ChatPipeline>();
 		return services;
+	}
+}
+
+/// <summary>
+/// Default MCP broker used when MCP integration is disabled.
+/// </summary>
+public sealed class NullMcpToolBroker : IMcpToolBroker
+{
+	/// <inheritdoc />
+	public Task<McpToolCallResult> InvokeAsync(McpToolCallRequest request, CancellationToken cancellationToken)
+	{
+		return Task.FromResult(
+			McpToolCallResult.Failed(
+				errorCode: "mcp_disabled",
+				errorMessage: "MCP broker is not enabled for this environment.",
+				latency: TimeSpan.Zero));
 	}
 }
