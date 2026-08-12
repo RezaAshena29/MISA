@@ -5,8 +5,11 @@ using MISA.Application;
 using MISA.Contracts;
 using MISA.Functions;
 using MISA.Infrastructure;
+using MISA.Knowledge;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MISA.ArchitectureTests;
@@ -123,6 +126,29 @@ public sealed class ChatFunctionsSseTests
 		Assert.Contains("\"type\":\"result\"", mcpLikeBody, StringComparison.Ordinal);
 	}
 
+	[Fact]
+	public async Task ChatWithConfigDrivenKnowledgeMcpTogglePreservesSseEventSequence()
+	{
+		var disabledFunctions = CreateConfiguredChatFunctions(
+			knowledgeMcpEnabled: false,
+			new ThrowingMcpToolBroker());
+		var enabledFunctions = CreateConfiguredChatFunctions(
+			knowledgeMcpEnabled: true,
+			new StaticMcpToolBroker("MCP knowledge response"));
+
+		var requestBody = "{\"message\":\"what is participating policy\",\"sessionId\":\"session-func-config-mcp\"}";
+		var disabledResponse = await disabledFunctions.Chat(CreateRequest(requestBody));
+		var enabledResponse = await enabledFunctions.Chat(CreateRequest(requestBody));
+
+		var disabledBody = await ReadBodyAsStringAsync(disabledResponse);
+		var enabledBody = await ReadBodyAsStringAsync(enabledResponse);
+
+		Assert.Equal(ExtractEventTypes(disabledBody), ExtractEventTypes(enabledBody));
+		Assert.Equal(["thinking", "thinking", "result"], ExtractEventTypes(enabledBody));
+		Assert.Contains("MCP knowledge response", enabledBody, StringComparison.Ordinal);
+		Assert.DoesNotContain("MCP knowledge response", disabledBody, StringComparison.Ordinal);
+	}
+
 	private static TestHttpRequestData CreateRequest(
 		string bodyJson,
 		string method = "POST",
@@ -147,6 +173,36 @@ public sealed class ChatFunctionsSseTests
 			.Where(line => line.StartsWith("event: ", StringComparison.Ordinal))
 			.Select(line => line[7..].Trim())
 			.ToList();
+	}
+
+	private static ChatFunctions CreateConfiguredChatFunctions(bool knowledgeMcpEnabled, IMcpToolBroker mcpToolBroker)
+	{
+		var configurationValues = new Dictionary<string, string?>
+		{
+			["Misa:Mcp:Enabled"] = "true",
+			["Misa:Mcp:BaseUrl"] = "http://unused-for-test",
+			["Misa:Mcp:AllowedToolsByRoute:knowledge:0"] = "knowledge.answer",
+			["Misa:Mcp:Knowledge:Enabled"] = knowledgeMcpEnabled ? "true" : "false",
+			["Misa:Mcp:Knowledge:ToolName"] = "knowledge.answer"
+		};
+		var configuration = new ConfigurationBuilder()
+			.AddInMemoryCollection(configurationValues)
+			.Build();
+
+		var services = new ServiceCollection();
+		services.AddSingleton<IConfiguration>(configuration);
+		services.AddLogging();
+		services.AddMisaApplication();
+		services.AddMisaInfrastructure(configuration);
+		services.AddMisaKnowledge();
+		services.AddSingleton<IAgentExecutionRuntime, KnowledgeOnlyExecutionRuntime>();
+		services.AddSingleton<IMcpToolBroker>(mcpToolBroker);
+
+		var serviceProvider = services.BuildServiceProvider();
+		return new ChatFunctions(
+			serviceProvider.GetRequiredService<IChatPipeline>(),
+			serviceProvider.GetRequiredService<IChatSessionStore>(),
+			NullLogger<ChatFunctions>.Instance);
 	}
 
 	private sealed class StaticPipeline : IChatPipeline
@@ -181,6 +237,48 @@ public sealed class ChatFunctionsSseTests
 			CallCount++;
 			await Task.Yield();
 			yield return ChatEventEnvelope.Text(ChatEventType.Result, "Should not execute for invalid payload.");
+		}
+	}
+
+	private sealed class KnowledgeOnlyExecutionRuntime : IAgentExecutionRuntime
+	{
+		private readonly IKnowledgeService _knowledgeService;
+
+		public KnowledgeOnlyExecutionRuntime(IKnowledgeService knowledgeService)
+		{
+			_knowledgeService = knowledgeService;
+		}
+
+		public async IAsyncEnumerable<ChatEventEnvelope> ExecuteAsync(
+			ChatRequestDto request,
+			[System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+		{
+			yield return ChatEventEnvelope.Text(ChatEventType.Thinking, "Looking this up in the knowledge base...");
+			var answer = await _knowledgeService.AnswerAsync(request, cancellationToken).ConfigureAwait(false);
+			yield return ChatEventEnvelope.Text(ChatEventType.Result, answer);
+		}
+	}
+
+	private sealed class StaticMcpToolBroker : IMcpToolBroker
+	{
+		private readonly string _content;
+
+		public StaticMcpToolBroker(string content)
+		{
+			_content = content;
+		}
+
+		public Task<McpToolCallResult> InvokeAsync(McpToolCallRequest request, CancellationToken cancellationToken)
+		{
+			return Task.FromResult(McpToolCallResult.Succeeded(_content, TimeSpan.FromMilliseconds(5)));
+		}
+	}
+
+	private sealed class ThrowingMcpToolBroker : IMcpToolBroker
+	{
+		public Task<McpToolCallResult> InvokeAsync(McpToolCallRequest request, CancellationToken cancellationToken)
+		{
+			throw new InvalidOperationException("MCP broker should not be called when knowledge MCP is disabled.");
 		}
 	}
 
