@@ -1,8 +1,10 @@
 using System.Net;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using MISA.Application;
 using MISA.Contracts;
+using MISA.Decisioning;
 using MISA.Functions;
 using MISA.Infrastructure;
 using MISA.Knowledge;
@@ -203,6 +205,46 @@ public sealed class ChatFunctionsSseTests
 		Assert.DoesNotContain("response JSON was malformed", body, StringComparison.OrdinalIgnoreCase);
 	}
 
+	[Fact]
+	public async Task ChatWithConfigDrivenDecisioningMcpTogglePreservesSseEventSequence()
+	{
+		var disabledFunctions = CreateConfiguredIllustrationChatFunctions(
+			decisioningMcpEnabled: false,
+			new ThrowingMcpToolBroker());
+		var enabledFunctions = CreateConfiguredIllustrationChatFunctions(
+			decisioningMcpEnabled: true,
+			new StaticMcpToolBroker(BuildMcpDecisioningTableJson()));
+
+		var requestBody = "{\"message\":\"male age 45 non-smoker budget $100k\",\"sessionId\":\"session-func-config-decisioning-mcp\"}";
+		var disabledResponse = await disabledFunctions.Chat(CreateRequest(requestBody));
+		var enabledResponse = await enabledFunctions.Chat(CreateRequest(requestBody));
+
+		var disabledBody = await ReadBodyAsStringAsync(disabledResponse);
+		var enabledBody = await ReadBodyAsStringAsync(enabledResponse);
+
+		Assert.Equal(ExtractEventTypes(disabledBody), ExtractEventTypes(enabledBody));
+		Assert.Equal(["thinking", "thinking", "progress", "result"], ExtractEventTypes(enabledBody));
+		Assert.Contains("MCP decisioning scenario", enabledBody, StringComparison.Ordinal);
+		Assert.DoesNotContain("MCP decisioning scenario", disabledBody, StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public async Task ChatWithDecisioningMcpFailureFallsBackWithoutErrorEvent()
+	{
+		var functions = CreateConfiguredIllustrationChatFunctions(
+			decisioningMcpEnabled: true,
+			new FailingMcpToolBroker());
+
+		var requestBody = "{\"message\":\"male age 45 non-smoker budget $100k\",\"sessionId\":\"session-func-config-decisioning-mcp-failure\"}";
+		var response = await functions.Chat(CreateRequest(requestBody));
+		var body = await ReadBodyAsStringAsync(response);
+
+		Assert.Equal(["thinking", "thinking", "progress", "result"], ExtractEventTypes(body));
+		Assert.DoesNotContain("event: error", body, StringComparison.Ordinal);
+		Assert.Contains("Maximize IRR at Life Expectancy", body, StringComparison.Ordinal);
+		Assert.DoesNotContain("MCP decisioning scenario", body, StringComparison.Ordinal);
+	}
+
 	private static TestHttpRequestData CreateRequest(
 		string bodyJson,
 		string method = "POST",
@@ -259,6 +301,74 @@ public sealed class ChatFunctionsSseTests
 			NullLogger<ChatFunctions>.Instance);
 	}
 
+	private static ChatFunctions CreateConfiguredIllustrationChatFunctions(bool decisioningMcpEnabled, IMcpToolBroker mcpToolBroker)
+	{
+		var configurationValues = new Dictionary<string, string?>
+		{
+			["Misa:Mcp:Enabled"] = "true",
+			["Misa:Mcp:BaseUrl"] = "http://unused-for-test",
+			["Misa:Mcp:AllowedToolsByRoute:illustration:0"] = "decisioning.recommendation.table",
+			["Misa:Mcp:Decisioning:Enabled"] = decisioningMcpEnabled ? "true" : "false",
+			["Misa:Mcp:Decisioning:RecommendationTableToolName"] = "decisioning.recommendation.table"
+		};
+		var configuration = new ConfigurationBuilder()
+			.AddInMemoryCollection(configurationValues)
+			.Build();
+
+		var services = new ServiceCollection();
+		services.AddSingleton<IConfiguration>(configuration);
+		services.AddLogging();
+		services.AddMisaApplication();
+		services.AddMisaInfrastructure(configuration);
+		services.AddMisaDecisioning();
+		services.AddSingleton<IAgentExecutionRuntime, IllustrationOnlyExecutionRuntime>();
+		services.AddSingleton<IMcpToolBroker>(mcpToolBroker);
+
+		var serviceProvider = services.BuildServiceProvider();
+		return new ChatFunctions(
+			serviceProvider.GetRequiredService<IChatPipeline>(),
+			serviceProvider.GetRequiredService<IChatSessionStore>(),
+			NullLogger<ChatFunctions>.Instance);
+	}
+
+	private static string BuildMcpDecisioningTableJson()
+	{
+		var table = new RecommendationTable(
+			ScenarioDescription: "MCP decisioning scenario",
+			ScenarioType: RecommendationScenarios.MaximizeIrrAtLe,
+			ClientSummary: "MCP generated profile",
+			PremiumBudget: 100000m,
+			Columns:
+			[
+				new RecommendationColumn(
+					Id: "mcp-pay90",
+					Label: "MCP Pay 90",
+					BaseCoverageAmount: 1200000m,
+					BaseAnnualPremium: 21000m,
+					DepositOptionPayment: 0m,
+					TotalAnnualOutlay: 21000m,
+					CashValueYear10: 300000m,
+					CashValueYear5: 120000m,
+					CashValueYear20: 700000m,
+					CvEfficiencyYear10: 103.4m,
+					IrrOnCsvYear10: 6.9m,
+					DeathBenefitAtLeCurrent: 2500000m,
+					IrrAtLeCurrent: 5.1m,
+					DeathBenefitAtLeMinus2: 2000000m,
+					IrrAtLeMinus2: 4.3m,
+					QuickPayCurrent: 9,
+					QuickPayMinus2: 11,
+					Recommended: true,
+					ExtendedPaymentsForStress: null,
+					StressPaymentExtensionNote: null,
+					LifeExpectancyAgeUsed: 84,
+					Explain: "MCP-backed recommendation",
+					Warnings: []),
+			]);
+
+		return JsonSerializer.Serialize(table);
+	}
+
 	private sealed class StaticPipeline : IChatPipeline
 	{
 		private readonly IReadOnlyList<ChatEventEnvelope> _events;
@@ -310,6 +420,32 @@ public sealed class ChatFunctionsSseTests
 			yield return ChatEventEnvelope.Text(ChatEventType.Thinking, "Looking this up in the knowledge base...");
 			var answer = await _knowledgeService.AnswerAsync(request, cancellationToken).ConfigureAwait(false);
 			yield return ChatEventEnvelope.Text(ChatEventType.Result, answer);
+		}
+	}
+
+	private sealed class IllustrationOnlyExecutionRuntime : IAgentExecutionRuntime
+	{
+		private readonly IDecisioningService _decisioningService;
+
+		public IllustrationOnlyExecutionRuntime(IDecisioningService decisioningService)
+		{
+			_decisioningService = decisioningService;
+		}
+
+		public async IAsyncEnumerable<ChatEventEnvelope> ExecuteAsync(
+			ChatRequestDto request,
+			[System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+		{
+			yield return ChatEventEnvelope.Text(
+				ChatEventType.Thinking,
+				"The user is asking me to help find the best policy for their client. Intention category: **Illustration**.");
+			yield return ChatEventEnvelope.Text(ChatEventType.Progress, "Sending illustration calculations...");
+
+			var recommendation = await _decisioningService
+				.BuildRecommendationTableAsync(request, cancellationToken)
+				.ConfigureAwait(false);
+
+			yield return ChatEventEnvelope.Text(ChatEventType.Result, recommendation.ScenarioDescription);
 		}
 	}
 
