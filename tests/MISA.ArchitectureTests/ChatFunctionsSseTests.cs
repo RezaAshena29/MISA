@@ -245,6 +245,43 @@ public sealed class ChatFunctionsSseTests
 		Assert.DoesNotContain("MCP decisioning scenario", body, StringComparison.Ordinal);
 	}
 
+	[Fact]
+	public async Task ChatWithDecisioningMalformedMcpPayloadFallsBackWithoutErrorEvent()
+	{
+		var functions = CreateConfiguredIllustrationChatFunctions(
+			decisioningMcpEnabled: true,
+			new MalformedPayloadMcpToolBroker());
+
+		var requestBody = "{\"message\":\"male age 45 non-smoker budget $100k\",\"sessionId\":\"session-func-config-decisioning-mcp-malformed\"}";
+		var response = await functions.Chat(CreateRequest(requestBody));
+		var body = await ReadBodyAsStringAsync(response);
+
+		Assert.Equal(["thinking", "thinking", "progress", "result"], ExtractEventTypes(body));
+		Assert.DoesNotContain("event: error", body, StringComparison.Ordinal);
+		Assert.Contains("Maximize IRR at Life Expectancy", body, StringComparison.Ordinal);
+		Assert.DoesNotContain("invalid_payload", body, StringComparison.OrdinalIgnoreCase);
+		Assert.DoesNotContain("response JSON was malformed", body, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public async Task ChatWithDecisioningMcpEnabledMasksSensitiveOutput()
+	{
+		var functions = CreateConfiguredIllustrationChatFunctions(
+			decisioningMcpEnabled: true,
+			new StaticMcpToolBroker(BuildMcpDecisioningTableJson("secret contact user@example.com call +1 555 444 3322")));
+
+		var requestBody = "{\"message\":\"male age 45 non-smoker budget $100k\",\"sessionId\":\"session-func-config-decisioning-mcp-mask\"}";
+		var response = await functions.Chat(CreateRequest(requestBody));
+		var body = await ReadBodyAsStringAsync(response);
+
+		Assert.Equal(["thinking", "thinking", "progress", "result"], ExtractEventTypes(body));
+		Assert.Contains("[redacted]", body, StringComparison.Ordinal);
+		Assert.Contains("[redacted-email]", body, StringComparison.Ordinal);
+		Assert.Contains("[redacted-phone]", body, StringComparison.Ordinal);
+		Assert.DoesNotContain("user@example.com", body, StringComparison.OrdinalIgnoreCase);
+		Assert.DoesNotContain("secret contact", body, StringComparison.OrdinalIgnoreCase);
+	}
+
 	private static TestHttpRequestData CreateRequest(
 		string bodyJson,
 		string method = "POST",
@@ -331,10 +368,10 @@ public sealed class ChatFunctionsSseTests
 			NullLogger<ChatFunctions>.Instance);
 	}
 
-	private static string BuildMcpDecisioningTableJson()
+	private static string BuildMcpDecisioningTableJson(string scenarioDescription = "MCP decisioning scenario")
 	{
 		var table = new RecommendationTable(
-			ScenarioDescription: "MCP decisioning scenario",
+			ScenarioDescription: scenarioDescription,
 			ScenarioType: RecommendationScenarios.MaximizeIrrAtLe,
 			ClientSummary: "MCP generated profile",
 			PremiumBudget: 100000m,
