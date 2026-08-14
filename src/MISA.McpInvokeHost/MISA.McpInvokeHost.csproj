@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MISA.Contracts\MISA.Contracts.csproj" />
+    <ProjectReference Include="..\MISA.Decisioning\MISA.Decisioning.csproj" />
+    <ProjectReference Include="..\MISA.Knowledge\MISA.Knowledge.csproj" />
+  </ItemGroup>
+
+</Project>
