@@ -1,0 +1,58 @@
+version: "3.9"
+
+services:
+  misa-mcpinvokehost:
+    container_name: misa-mcpinvokehost
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: misa-agentic-mcp-host:local
+    environment:
+      MCP_LISTEN_URL: http://0.0.0.0:19082
+    ports:
+      - "19082:19082"
+    networks:
+      - misa-shared
+
+  misa-functions:
+    container_name: misa-functions
+    build:
+      context: .
+      dockerfile: Dockerfile.functions
+    image: misa-agentic-functions:local
+    environment:
+      FUNCTIONS_WORKER_RUNTIME: dotnet-isolated
+      AzureWebJobsStorage: DefaultEndpointsProtocol=http;AccountName=misaaccount;AccountKey=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=;BlobEndpoint=http://misa-azurite:10000/misaaccount;QueueEndpoint=http://misa-azurite:10001/misaaccount;TableEndpoint=http://misa-azurite:10002/misaaccount;
+      Misa__Mcp__BaseUrl: http://misa-mcpinvokehost:19082/mcp
+      Misa__Mcp__Enabled: "true"
+      Misa__Mcp__Knowledge__Enabled: "true"
+      Misa__Mcp__Decisioning__Enabled: "true"
+    ports:
+      - "7071:80"
+    depends_on:
+      - misa-mcpinvokehost
+      - misa-azurite
+    networks:
+      - misa-shared
+
+  misa-azurite:
+    container_name: misa-azurite
+    image: mcr.microsoft.com/azure-storage/azurite
+    environment:
+      AZURITE_ACCOUNTS: misaaccount:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+    command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
+    volumes:
+      - azurite-data:/data
+    networks:
+      - misa-shared
+
+volumes:
+  azurite-data:
+
+networks:
+  misa-shared:
+    name: misa-shared
