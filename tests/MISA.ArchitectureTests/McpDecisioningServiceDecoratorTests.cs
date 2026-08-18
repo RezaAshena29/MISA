@@ -17,7 +17,7 @@ public sealed class McpDecisioningServiceDecoratorTests
 			Options.Create(new DecisioningMcpOptions
 			{
 				Enabled = false,
-				RecommendationTableToolName = "decisioning.recommendation.table"
+				RecommendationTableToolName = "decisioning.mcp"
 			}));
 
 		var table = await decorator.BuildRecommendationTableAsync(
@@ -35,7 +35,7 @@ public sealed class McpDecisioningServiceDecoratorTests
 		var broker = new StubMcpToolBroker(request =>
 		{
 			Assert.Equal("illustration", request.Route);
-			Assert.Equal("decisioning.recommendation.table", request.ToolName);
+			Assert.Equal("decisioning.mcp", request.ToolName);
 			var payload = JsonSerializer.Serialize(BuildMcpTable());
 			return Task.FromResult(McpToolCallResult.Succeeded(payload, TimeSpan.FromMilliseconds(7)));
 		});
@@ -46,7 +46,7 @@ public sealed class McpDecisioningServiceDecoratorTests
 			Options.Create(new DecisioningMcpOptions
 			{
 				Enabled = true,
-				RecommendationTableToolName = "decisioning.recommendation.table"
+				RecommendationTableToolName = "decisioning.mcp"
 			}));
 
 		var table = await decorator.BuildRecommendationTableAsync(
@@ -68,7 +68,7 @@ public sealed class McpDecisioningServiceDecoratorTests
 			Options.Create(new DecisioningMcpOptions
 			{
 				Enabled = true,
-				RecommendationTableToolName = "decisioning.recommendation.table"
+				RecommendationTableToolName = "decisioning.mcp"
 			}));
 
 		var table = await decorator.BuildRecommendationTableAsync(
@@ -89,7 +89,7 @@ public sealed class McpDecisioningServiceDecoratorTests
 			Options.Create(new DecisioningMcpOptions
 			{
 				Enabled = true,
-				RecommendationTableToolName = "decisioning.recommendation.table"
+				RecommendationTableToolName = "decisioning.mcp"
 			}));
 
 		var table = await decorator.BuildRecommendationTableAsync(

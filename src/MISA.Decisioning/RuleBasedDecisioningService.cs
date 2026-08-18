@@ -619,7 +619,7 @@ public sealed class DecisioningMcpOptions
 	/// <summary>
 	/// MCP tool name used for recommendation table generation.
 	/// </summary>
-	public string RecommendationTableToolName { get; set; } = "decisioning.recommendation.table";
+	public string RecommendationTableToolName { get; set; } = "decisioning.mcp";
 }
 
 /// <summary>

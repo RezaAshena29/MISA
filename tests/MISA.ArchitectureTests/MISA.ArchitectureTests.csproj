@@ -26,6 +26,8 @@
     <ProjectReference Include="..\..\src\MISA.Agents\MISA.Agents.csproj" />
     <ProjectReference Include="..\..\src\MISA.Decisioning\MISA.Decisioning.csproj" />
     <ProjectReference Include="..\..\src\MISA.Knowledge\MISA.Knowledge.csproj" />
+    <ProjectReference Include="..\..\src\MISA.Reasoning\MISA.Reasoning.csproj" />
+    <ProjectReference Include="..\..\src\MISA.Clarification\MISA.Clarification.csproj" />
     <ProjectReference Include="..\..\src\MISA.Orchestration.Akka\MISA.Orchestration.Akka.csproj" />
     <ProjectReference Include="..\..\src\MISA.Functions\MISA.Functions.csproj" />
   </ItemGroup>

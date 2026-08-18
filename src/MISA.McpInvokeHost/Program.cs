@@ -1,13 +1,18 @@
 using System.Text.Json;
+using MISA.Application;
+using MISA.Clarification;
 using MISA.Contracts;
 using MISA.Decisioning;
 using MISA.Knowledge;
+using MISA.Reasoning;
 
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 
 var knowledgeService = new KnowledgeService();
 var decisioningService = new RuleBasedDecisioningService();
+var reasoningService = new ReasoningService(knowledgeService);
+var clarificationService = new ClarificationService();
 
 app.MapGet("/mcp/health", () =>
 {
@@ -41,7 +46,7 @@ app.MapPost("/mcp/tools/invoke", async (McpInvokeRequest request, CancellationTo
 		Product: product,
 		Language: language);
 
-	if (string.Equals(request.ToolName, "knowledge.answer", StringComparison.OrdinalIgnoreCase))
+	if (string.Equals(request.ToolName, "knowledge.mcp", StringComparison.OrdinalIgnoreCase))
 	{
 		var answer = await knowledgeService.AnswerAsync(chatRequest, cancellationToken).ConfigureAwait(false);
 		return Results.Json(new
@@ -53,13 +58,39 @@ app.MapPost("/mcp/tools/invoke", async (McpInvokeRequest request, CancellationTo
 		});
 	}
 
-	if (string.Equals(request.ToolName, "decisioning.recommendation.table", StringComparison.OrdinalIgnoreCase))
+	if (string.Equals(request.ToolName, "decisioning.mcp", StringComparison.OrdinalIgnoreCase))
 	{
 		var table = await decisioningService.BuildRecommendationTableAsync(chatRequest, cancellationToken).ConfigureAwait(false);
 		return Results.Json(new
 		{
 			success = true,
 			content = JsonSerializer.Serialize(table),
+			errorCode = (string?)null,
+			errorMessage = (string?)null
+		});
+	}
+
+	if (string.Equals(request.ToolName, "reasoning.mcp", StringComparison.OrdinalIgnoreCase))
+	{
+		var priorState = new ChatSessionState(sessionId);
+		var reasoning = await reasoningService.BuildReasoningAsync(chatRequest, priorState, cancellationToken).ConfigureAwait(false);
+		return Results.Json(new
+		{
+			success = true,
+			content = reasoning,
+			errorCode = (string?)null,
+			errorMessage = (string?)null
+		});
+	}
+
+	if (string.Equals(request.ToolName, "clarification.mcp", StringComparison.OrdinalIgnoreCase))
+	{
+		var priorState = new ChatSessionState(sessionId);
+		var clarification = await clarificationService.BuildClarificationPromptAsync(chatRequest, priorState, cancellationToken).ConfigureAwait(false);
+		return Results.Json(new
+		{
+			success = true,
+			content = clarification,
 			errorCode = (string?)null,
 			errorMessage = (string?)null
 		});

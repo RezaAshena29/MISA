@@ -32,6 +32,28 @@ public sealed partial class AkkaClusterExecutionRuntime : IAgentExecutionRuntime
 		IDecisioningService decisioningService,
 		IChatSessionStore sessionStore,
 		ILogger<AkkaClusterExecutionRuntime> logger)
+		: this(
+			agentRouter,
+			knowledgeService,
+			decisioningService,
+			new LocalReasoningService(knowledgeService),
+			new LocalClarificationService(),
+			sessionStore,
+			logger)
+	{
+	}
+
+	/// <summary>
+	/// Creates and starts the cluster actor system.
+	/// </summary>
+	public AkkaClusterExecutionRuntime(
+		IAgentRouter agentRouter,
+		IKnowledgeService knowledgeService,
+		IDecisioningService decisioningService,
+		IReasoningService reasoningService,
+		IClarificationService clarificationService,
+		IChatSessionStore sessionStore,
+		ILogger<AkkaClusterExecutionRuntime> logger)
 	{
 		_logger = logger;
 
@@ -49,10 +71,39 @@ akka {
 
 		_actorSystem = ActorSystem.Create("misa-agentic-system", config);
 		_coordinator = _actorSystem.ActorOf(
-			Props.Create(() => new OrchestratorAgentActor(agentRouter, knowledgeService, decisioningService, sessionStore)),
+			Props.Create(() => new OrchestratorAgentActor(agentRouter, knowledgeService, decisioningService, reasoningService, clarificationService, sessionStore)),
 			"orchestrator-agent");
 
 		AkkaRuntimeLog.RuntimeInitialized(_logger);
+	}
+
+	private sealed class LocalReasoningService : IReasoningService
+	{
+		private readonly IKnowledgeService _knowledgeService;
+
+		public LocalReasoningService(IKnowledgeService knowledgeService)
+		{
+			_knowledgeService = knowledgeService;
+		}
+
+		public async Task<string> BuildReasoningAsync(ChatRequestDto request, ChatSessionState? priorState, CancellationToken cancellationToken)
+		{
+			var knowledge = await _knowledgeService.AnswerAsync(request, cancellationToken).ConfigureAwait(false);
+			if (string.IsNullOrWhiteSpace(priorState?.LastRecommendation))
+			{
+				return "I do not have a prior recommendation in this session yet. " + knowledge;
+			}
+
+			return $"Previous recommendation:\n{priorState.LastRecommendation}\n\nSupporting explanation:\n{knowledge}";
+		}
+	}
+
+	private sealed class LocalClarificationService : IClarificationService
+	{
+		public Task<string> BuildClarificationPromptAsync(ChatRequestDto request, ChatSessionState? priorState, CancellationToken cancellationToken)
+		{
+			return Task.FromResult("I need a bit more to run this case. Could you share age, gender, smoking status, and premium budget?");
+		}
 	}
 
 	/// <inheritdoc />
@@ -155,10 +206,11 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 	private readonly IAgentRouter _agentRouter;
 	private readonly IKnowledgeService _knowledgeService;
 	private readonly IDecisioningService _decisioningService;
+	private readonly IReasoningService _reasoningService;
+	private readonly IClarificationService _clarificationService;
 	private readonly IChatSessionStore _sessionStore;
 	private readonly IActorRef _intentAnalyzerAgent;
 	private readonly IActorRef _contextMemoryAgent;
-	private readonly IActorRef _clarifierAgent;
 	private readonly IActorRef _illustrationPlannerAgent;
 	private readonly IActorRef _validationGuardAgent;
 	private readonly IActorRef _calcWorkerPoolAgent;
@@ -171,11 +223,15 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		IAgentRouter agentRouter,
 		IKnowledgeService knowledgeService,
 		IDecisioningService decisioningService,
+		IReasoningService reasoningService,
+		IClarificationService clarificationService,
 		IChatSessionStore sessionStore)
 	{
 		_agentRouter = agentRouter;
 		_knowledgeService = knowledgeService;
 		_decisioningService = decisioningService;
+		_reasoningService = reasoningService;
+		_clarificationService = clarificationService;
 		_sessionStore = sessionStore;
 		var calcWorkerCount = ReadPositiveIntSetting(CalcWorkerCountEnvVar, DefaultCalcWorkerCount);
 		var calcWorkerTimeout = TimeSpan.FromMilliseconds(ReadPositiveIntSetting(CalcWorkerTimeoutMsEnvVar, DefaultCalcWorkerTimeoutMs));
@@ -183,7 +239,6 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		var knowledgeTimeout = TimeSpan.FromMilliseconds(ReadPositiveIntSetting(KnowledgeTimeoutMsEnvVar, DefaultKnowledgeTimeoutMs));
 		_intentAnalyzerAgent = Context.ActorOf(Props.Create(() => new IntentAnalyzerAgentActor(_agentRouter)), "intent-analyzer-agent");
 		_contextMemoryAgent = Context.ActorOf(Props.Create(() => new ContextMemoryAgentActor(_sessionStore)), "context-memory-agent");
-		_clarifierAgent = Context.ActorOf(Props.Create(() => new ClarifierAgentActor()), "clarifier-agent");
 		_illustrationPlannerAgent = Context.ActorOf(Props.Create(() => new IllustrationPlannerAgentActor()), "illustration-planner-agent");
 		_validationGuardAgent = Context.ActorOf(Props.Create(() => new ValidationGuardAgentActor()), "validation-guard-agent");
 		_calcWorkerPoolAgent = Context.ActorOf(Props.Create(() => new CalcWorkerPoolAgentActor(_decisioningService, calcWorkerCount, calcWorkerTimeout)), "calc-worker-pool-agent");
@@ -201,7 +256,6 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 	private sealed record ResolveIntentCommand(ChatRequestDto Request);
 	private sealed record LoadSessionStateCommand(string SessionId);
 	private sealed record SaveSessionStateCommand(ChatSessionState State);
-	private sealed record BuildClarificationCommand();
 	private sealed record BuildAssumptionsCommand(ChatRequestDto Request);
 	private sealed record ValidateIllustrationInputCommand(ChatRequestDto Request);
 	private sealed record ExecuteCalculationCommand(ChatRequestDto Request);
@@ -285,7 +339,9 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		ChatSessionState? priorState,
 		CancellationToken cancellationToken)
 	{
-		var reasoningContent = await BuildReasoningContentAsync(request, priorState, cancellationToken).ConfigureAwait(false);
+		var reasoningContent = await _reasoningService
+			.BuildReasoningAsync(request, priorState, cancellationToken)
+			.ConfigureAwait(false);
 		await _contextMemoryAgent
 			.Ask<bool>(
 				new SaveSessionStateCommand(new ChatSessionState(request.SessionId, LastRoute: ReasoningRoute, LastRecommendation: priorState?.LastRecommendation)),
@@ -310,8 +366,8 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 				cancellationToken)
 			.ConfigureAwait(false);
 
-		var clarificationPrompt = await _clarifierAgent
-			.Ask<string>(new BuildClarificationCommand(), cancellationToken)
+		var clarificationPrompt = await _clarificationService
+			.BuildClarificationPromptAsync(request, priorState, cancellationToken)
 			.ConfigureAwait(false);
 
 		return
@@ -471,16 +527,6 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 			var replyTo = Sender;
 			await _sessionStore.SaveAsync(command.State, CancellationToken.None).ConfigureAwait(false);
 			replyTo.Tell(true);
-		}
-	}
-
-	private sealed class ClarifierAgentActor : ReceiveActor
-	{
-		private const string DefaultPrompt = "I need a bit more to run this case. Could you share age, gender, smoking status, and premium budget?";
-
-		public ClarifierAgentActor()
-		{
-			Receive<BuildClarificationCommand>(_ => Sender.Tell(DefaultPrompt));
 		}
 	}
 
@@ -718,20 +764,6 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 			Receive<ComposeResponseCommand>(command =>
 				Sender.Tell(ChatEventEnvelope.Text(ChatEventType.Result, FormatIllustrationResultMarkdown(command.Recommendation, command.Knowledge))));
 		}
-	}
-
-	private async Task<string> BuildReasoningContentAsync(
-		ChatRequestDto request,
-		ChatSessionState? priorState,
-		CancellationToken cancellationToken)
-	{
-		var knowledge = await _knowledgeService.AnswerAsync(request, cancellationToken).ConfigureAwait(false);
-		if (string.IsNullOrWhiteSpace(priorState?.LastRecommendation))
-		{
-			return "I do not have a prior recommendation in this session yet. " + knowledge;
-		}
-
-		return $"Previous recommendation:\n{priorState.LastRecommendation}\n\nSupporting explanation:\n{knowledge}";
 	}
 
 	private static bool HasSufficientIllustrationInput(ChatRequestDto request, out string clarificationPrompt)

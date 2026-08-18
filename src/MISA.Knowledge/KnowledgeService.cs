@@ -100,7 +100,7 @@ public sealed class KnowledgeMcpOptions
 	/// <summary>
 	/// MCP tool name used for knowledge responses.
 	/// </summary>
-	public string ToolName { get; set; } = "knowledge.answer";
+	public string ToolName { get; set; } = "knowledge.mcp";
 }
 
 /// <summary>

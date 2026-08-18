@@ -4,6 +4,8 @@ using MISA.Decisioning;
 using MISA.Infrastructure;
 using MISA.Knowledge;
 using MISA.Orchestration.Akka;
+using MISA.Reasoning;
+using MISA.Clarification;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -216,7 +218,7 @@ public sealed class SseContractParityTests
 			Options.Create(new KnowledgeMcpOptions
 			{
 				Enabled = true,
-				ToolName = "knowledge.answer"
+				ToolName = "knowledge.mcp"
 			}));
 
 		await using var runtime = new AkkaClusterExecutionRuntime(
@@ -244,7 +246,7 @@ public sealed class SseContractParityTests
 			Options.Create(new KnowledgeMcpOptions
 			{
 				Enabled = false,
-				ToolName = "knowledge.answer"
+				ToolName = "knowledge.mcp"
 			}));
 
 		var enabledKnowledge = new McpKnowledgeServiceDecorator(
@@ -253,7 +255,7 @@ public sealed class SseContractParityTests
 			Options.Create(new KnowledgeMcpOptions
 			{
 				Enabled = true,
-				ToolName = "knowledge.answer"
+				ToolName = "knowledge.mcp"
 			}));
 
 		await using var disabledRuntime = new AkkaClusterExecutionRuntime(
@@ -288,7 +290,7 @@ public sealed class SseContractParityTests
 			Options.Create(new DecisioningMcpOptions
 			{
 				Enabled = true,
-				RecommendationTableToolName = "decisioning.recommendation.table"
+				RecommendationTableToolName = "decisioning.mcp"
 			}));
 
 		await using var runtime = new AkkaClusterExecutionRuntime(
@@ -316,7 +318,7 @@ public sealed class SseContractParityTests
 			Options.Create(new DecisioningMcpOptions
 			{
 				Enabled = false,
-				RecommendationTableToolName = "decisioning.recommendation.table"
+				RecommendationTableToolName = "decisioning.mcp"
 			}));
 
 		var failedDecisioning = new McpDecisioningServiceDecorator(
@@ -325,7 +327,7 @@ public sealed class SseContractParityTests
 			Options.Create(new DecisioningMcpOptions
 			{
 				Enabled = true,
-				RecommendationTableToolName = "decisioning.recommendation.table"
+				RecommendationTableToolName = "decisioning.mcp"
 			}));
 
 		await using var disabledRuntime = new AkkaClusterExecutionRuntime(
@@ -393,6 +395,65 @@ public sealed class SseContractParityTests
 		Assert.Contains("Knowledge reference for contract test.", result.Content.ToString(), StringComparison.OrdinalIgnoreCase);
 	}
 
+	[Fact]
+	public async Task ReasoningRouteWithMcpEnabledStillProducesThinkingThenResult()
+	{
+		var reasoningService = new McpReasoningServiceDecorator(
+			new ReasoningService(new StaticKnowledgeService()),
+			new StaticMcpToolBroker(McpToolCallResult.Succeeded("MCP reasoning response", TimeSpan.FromMilliseconds(11))),
+			Options.Create(new ReasoningMcpOptions
+			{
+				Enabled = true,
+				ToolName = "reasoning.mcp"
+			}));
+
+		await using var runtime = new AkkaClusterExecutionRuntime(
+			new FixedRouteRouter("reasoning"),
+			new StaticKnowledgeService(),
+			new StaticDecisioningService(),
+			reasoningService,
+			new StaticClarificationService(),
+			new InMemoryChatSessionStore(),
+			NullLogger<AkkaClusterExecutionRuntime>.Instance);
+
+		var request = new ChatRequestDto("why this option", "session-reasoning-mcp-enabled");
+		var events = await CollectAsync(runtime.ExecuteAsync(request, CancellationToken.None));
+
+		Assert.Equal(2, events.Count);
+		Assert.Equal(ChatEventType.Thinking, events[0].Type);
+		Assert.Equal(ChatEventType.Result, events[1].Type);
+		Assert.Equal("MCP reasoning response", events[1].Content);
+	}
+
+	[Fact]
+	public async Task ClarificationRouteWithMcpEnabledProducesClarificationEvent()
+	{
+		var clarificationService = new McpClarificationServiceDecorator(
+			new ClarificationService(),
+			new StaticMcpToolBroker(McpToolCallResult.Succeeded("MCP clarification prompt", TimeSpan.FromMilliseconds(11))),
+			Options.Create(new ClarificationMcpOptions
+			{
+				Enabled = true,
+				ToolName = "clarification.mcp"
+			}));
+
+		await using var runtime = new AkkaClusterExecutionRuntime(
+			new FixedRouteRouter("clarification"),
+			new StaticKnowledgeService(),
+			new StaticDecisioningService(),
+			new StaticReasoningService(),
+			clarificationService,
+			new InMemoryChatSessionStore(),
+			NullLogger<AkkaClusterExecutionRuntime>.Instance);
+
+		var request = new ChatRequestDto("what else do you need", "session-clarification-mcp-enabled");
+		var events = await CollectAsync(runtime.ExecuteAsync(request, CancellationToken.None));
+
+		Assert.Single(events);
+		Assert.Equal(ChatEventType.Clarification, events[0].Type);
+		Assert.Equal("MCP clarification prompt", events[0].Content);
+	}
+
 	private static async Task<List<ChatEventEnvelope>> CollectAsync(IAsyncEnumerable<ChatEventEnvelope> stream)
 	{
 		var results = new List<ChatEventEnvelope>();
@@ -444,6 +505,22 @@ public sealed class SseContractParityTests
 		public Task<McpToolCallResult> InvokeAsync(McpToolCallRequest request, CancellationToken cancellationToken)
 		{
 			return Task.FromResult(_result);
+		}
+	}
+
+	private sealed class StaticReasoningService : IReasoningService
+	{
+		public Task<string> BuildReasoningAsync(ChatRequestDto request, ChatSessionState? priorState, CancellationToken cancellationToken)
+		{
+			return Task.FromResult("Static reasoning response for test.");
+		}
+	}
+
+	private sealed class StaticClarificationService : IClarificationService
+	{
+		public Task<string> BuildClarificationPromptAsync(ChatRequestDto request, ChatSessionState? priorState, CancellationToken cancellationToken)
+		{
+			return Task.FromResult("Static clarification prompt for test.");
 		}
 	}
 

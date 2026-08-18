@@ -23,7 +23,7 @@ public sealed class McpKnowledgeIntegrationTests
 			Options.Create(new KnowledgeMcpOptions
 			{
 				Enabled = true,
-				ToolName = "knowledge.answer"
+				ToolName = "knowledge.mcp"
 			}));
 
 		var response = await decorator.AnswerAsync(new ChatRequestDto("what is par", "k-int-1"), CancellationToken.None);
@@ -47,7 +47,7 @@ public sealed class McpKnowledgeIntegrationTests
 				DefaultTimeoutMs = 20,
 				AllowedToolsByRoute = new Dictionary<string, string[]>
 				{
-					["knowledge"] = ["knowledge.answer"]
+					["knowledge"] = ["knowledge.mcp"]
 				}
 			});
 		var decorator = new McpKnowledgeServiceDecorator(
@@ -56,7 +56,7 @@ public sealed class McpKnowledgeIntegrationTests
 			Options.Create(new KnowledgeMcpOptions
 			{
 				Enabled = true,
-				ToolName = "knowledge.answer"
+				ToolName = "knowledge.mcp"
 			}));
 
 		var response = await decorator.AnswerAsync(new ChatRequestDto("hello there", "k-int-2"), CancellationToken.None);
@@ -75,7 +75,7 @@ public sealed class McpKnowledgeIntegrationTests
 			DefaultTimeoutMs = 500,
 			AllowedToolsByRoute = new Dictionary<string, string[]>
 			{
-				["knowledge"] = ["knowledge.answer"]
+				["knowledge"] = ["knowledge.mcp"]
 			}
 		};
 

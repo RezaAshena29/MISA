@@ -16,7 +16,7 @@ public sealed class McpKnowledgeServiceDecoratorTests
 		var options = Options.Create(new KnowledgeMcpOptions
 		{
 			Enabled = false,
-			ToolName = "knowledge.answer"
+			ToolName = "knowledge.mcp"
 		});
 		var decorator = new McpKnowledgeServiceDecorator(inner, broker, options);
 
@@ -32,13 +32,13 @@ public sealed class McpKnowledgeServiceDecoratorTests
 		var broker = new StubMcpToolBroker(request =>
 		{
 			Assert.Equal("knowledge", request.Route);
-			Assert.Equal("knowledge.answer", request.ToolName);
+			Assert.Equal("knowledge.mcp", request.ToolName);
 			return Task.FromResult(McpToolCallResult.Succeeded("mcp knowledge content", TimeSpan.FromMilliseconds(8)));
 		});
 		var options = Options.Create(new KnowledgeMcpOptions
 		{
 			Enabled = true,
-			ToolName = "knowledge.answer"
+			ToolName = "knowledge.mcp"
 		});
 		var decorator = new McpKnowledgeServiceDecorator(inner, broker, options);
 
@@ -56,7 +56,7 @@ public sealed class McpKnowledgeServiceDecoratorTests
 		var options = Options.Create(new KnowledgeMcpOptions
 		{
 			Enabled = true,
-			ToolName = "knowledge.answer"
+			ToolName = "knowledge.mcp"
 		});
 		var decorator = new McpKnowledgeServiceDecorator(inner, broker, options);
 

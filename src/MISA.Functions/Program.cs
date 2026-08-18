@@ -4,6 +4,8 @@ using MISA.Application;
 using MISA.Decisioning;
 using MISA.Infrastructure;
 using MISA.Knowledge;
+using MISA.Reasoning;
+using MISA.Clarification;
 using MISA.Observability;
 using MISA.Orchestration.Akka;
 using Microsoft.Azure.Functions.Worker;
@@ -28,6 +30,8 @@ builder.Services
     .AddMisaInfrastructure(builder.Configuration)
     .AddMisaDecisioning()
     .AddMisaKnowledge()
+    .AddMisaReasoning()
+    .AddMisaClarification()
     .AddMisaAgents()
     .AddMisaOrchestrationAkka();
 

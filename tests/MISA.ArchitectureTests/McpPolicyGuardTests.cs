@@ -13,12 +13,12 @@ public sealed class McpPolicyGuardTests
 			Enabled = false,
 			AllowedToolsByRoute = new Dictionary<string, string[]>
 			{
-				["knowledge"] = ["knowledge.answer"]
+				["knowledge"] = ["knowledge.mcp"]
 			}
 		});
 		var guard = new McpPolicyGuard(options);
 
-		Assert.False(guard.IsAllowed("knowledge", "knowledge.answer"));
+		Assert.False(guard.IsAllowed("knowledge", "knowledge.mcp"));
 	}
 
 	[Fact]
@@ -29,14 +29,18 @@ public sealed class McpPolicyGuardTests
 			Enabled = true,
 			AllowedToolsByRoute = new Dictionary<string, string[]>
 			{
-				["knowledge"] = ["knowledge.answer"]
+				["knowledge"] = ["knowledge.mcp"],
+				["reasoning"] = ["reasoning.mcp"],
+				["clarification"] = ["clarification.mcp"]
 			}
 		});
 		var guard = new McpPolicyGuard(options);
 
-		Assert.True(guard.IsAllowed("knowledge", "knowledge.answer"));
+		Assert.True(guard.IsAllowed("knowledge", "knowledge.mcp"));
+		Assert.True(guard.IsAllowed("reasoning", "reasoning.mcp"));
+		Assert.True(guard.IsAllowed("clarification", "clarification.mcp"));
 		Assert.False(guard.IsAllowed("knowledge", "other.tool"));
-		Assert.False(guard.IsAllowed("illustration", "knowledge.answer"));
+		Assert.False(guard.IsAllowed("illustration", "knowledge.mcp"));
 	}
 
 	[Fact]
@@ -48,12 +52,12 @@ public sealed class McpPolicyGuardTests
 			DefaultTimeoutMs = 2500,
 			ToolTimeoutsMs = new Dictionary<string, int>
 			{
-				["knowledge.answer"] = 1200
+				["knowledge.mcp"] = 1200
 			}
 		});
 		var guard = new McpPolicyGuard(options);
 
-		Assert.Equal(1200, (int)guard.GetTimeout("knowledge.answer").TotalMilliseconds);
+		Assert.Equal(1200, (int)guard.GetTimeout("knowledge.mcp").TotalMilliseconds);
 		Assert.Equal(2500, (int)guard.GetTimeout("unknown.tool").TotalMilliseconds);
 	}
 }

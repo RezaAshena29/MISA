@@ -8,6 +8,8 @@
     <Project Path="src/MISA.Functions/MISA.Functions.csproj" />
     <Project Path="src/MISA.Infrastructure/MISA.Infrastructure.csproj" />
     <Project Path="src/MISA.Knowledge/MISA.Knowledge.csproj" />
+    <Project Path="src/MISA.Reasoning/MISA.Reasoning.csproj" />
+    <Project Path="src/MISA.Clarification/MISA.Clarification.csproj" />
     <Project Path="src/MISA.McpInvokeHost/MISA.McpInvokeHost.csproj" />
     <Project Path="src/MISA.Observability/MISA.Observability.csproj" />
     <Project Path="src/MISA.Orchestration.Akka/MISA.Orchestration.Akka.csproj" />

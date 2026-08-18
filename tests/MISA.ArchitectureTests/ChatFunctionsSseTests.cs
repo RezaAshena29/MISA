@@ -314,9 +314,9 @@ public sealed class ChatFunctionsSseTests
 		{
 			["Misa:Mcp:Enabled"] = "true",
 			["Misa:Mcp:BaseUrl"] = "http://unused-for-test",
-			["Misa:Mcp:AllowedToolsByRoute:knowledge:0"] = "knowledge.answer",
+			["Misa:Mcp:AllowedToolsByRoute:knowledge:0"] = "knowledge.mcp",
 			["Misa:Mcp:Knowledge:Enabled"] = knowledgeMcpEnabled ? "true" : "false",
-			["Misa:Mcp:Knowledge:ToolName"] = "knowledge.answer"
+			["Misa:Mcp:Knowledge:ToolName"] = "knowledge.mcp"
 		};
 		var configuration = new ConfigurationBuilder()
 			.AddInMemoryCollection(configurationValues)
@@ -344,9 +344,9 @@ public sealed class ChatFunctionsSseTests
 		{
 			["Misa:Mcp:Enabled"] = "true",
 			["Misa:Mcp:BaseUrl"] = "http://unused-for-test",
-			["Misa:Mcp:AllowedToolsByRoute:illustration:0"] = "decisioning.recommendation.table",
+			["Misa:Mcp:AllowedToolsByRoute:illustration:0"] = "decisioning.mcp",
 			["Misa:Mcp:Decisioning:Enabled"] = decisioningMcpEnabled ? "true" : "false",
-			["Misa:Mcp:Decisioning:RecommendationTableToolName"] = "decisioning.recommendation.table"
+			["Misa:Mcp:Decisioning:RecommendationTableToolName"] = "decisioning.mcp"
 		};
 		var configuration = new ConfigurationBuilder()
 			.AddInMemoryCollection(configurationValues)

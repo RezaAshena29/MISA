@@ -122,6 +122,28 @@ public interface IDecisioningService
 }
 
 /// <summary>
+/// Reasoning response abstraction.
+/// </summary>
+public interface IReasoningService
+{
+	/// <summary>
+	/// Builds reasoning output, optionally grounded in prior session recommendation context.
+	/// </summary>
+	Task<string> BuildReasoningAsync(ChatRequestDto request, ChatSessionState? priorState, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Clarification prompt abstraction.
+/// </summary>
+public interface IClarificationService
+{
+	/// <summary>
+	/// Builds a clarification prompt for missing or ambiguous user inputs.
+	/// </summary>
+	Task<string> BuildClarificationPromptAsync(ChatRequestDto request, ChatSessionState? priorState, CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Scenario constants for recommendation outputs.
 /// </summary>
 public static class RecommendationScenarios

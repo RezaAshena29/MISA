@@ -10,6 +10,8 @@
     <ProjectReference Include="..\MISA.Contracts\MISA.Contracts.csproj" />
     <ProjectReference Include="..\MISA.Decisioning\MISA.Decisioning.csproj" />
     <ProjectReference Include="..\MISA.Knowledge\MISA.Knowledge.csproj" />
+    <ProjectReference Include="..\MISA.Reasoning\MISA.Reasoning.csproj" />
+    <ProjectReference Include="..\MISA.Clarification\MISA.Clarification.csproj" />
   </ItemGroup>
 
 </Project>

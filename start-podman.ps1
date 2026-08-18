@@ -22,7 +22,7 @@ try {
 
     podman run -d --name misa-mcpinvokehost --network misa-shared -p 19082:19082 -e MCP_LISTEN_URL=http://0.0.0.0:19082 misa-agentic-mcp-host:local
 
-    podman run -d --name misa-functions --network misa-shared -p 7071:80 -e FUNCTIONS_WORKER_RUNTIME=dotnet-isolated -e AzureWebJobsStorage="DefaultEndpointsProtocol=http;AccountName=misaaccount;AccountKey=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=;BlobEndpoint=http://misa-azurite:10000/misaaccount;QueueEndpoint=http://misa-azurite:10001/misaaccount;TableEndpoint=http://misa-azurite:10002/misaaccount;" -e Misa__Mcp__BaseUrl=http://misa-mcpinvokehost:19082/mcp -e Misa__Mcp__Enabled=true -e Misa__Mcp__Knowledge__Enabled=true -e Misa__Mcp__Decisioning__Enabled=true misa-agentic-functions:local
+    podman run -d --name misa-functions --network misa-shared -p 7071:80 -e FUNCTIONS_WORKER_RUNTIME=dotnet-isolated -e AzureWebJobsStorage="DefaultEndpointsProtocol=http;AccountName=misaaccount;AccountKey=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=;BlobEndpoint=http://misa-azurite:10000/misaaccount;QueueEndpoint=http://misa-azurite:10001/misaaccount;TableEndpoint=http://misa-azurite:10002/misaaccount;" -e Misa__Mcp__BaseUrl=http://misa-mcpinvokehost:19082/mcp -e Misa__Mcp__Enabled=true -e Misa__Mcp__Knowledge__Enabled=true -e Misa__Mcp__Decisioning__Enabled=true -e Misa__Mcp__Reasoning__Enabled=true -e Misa__Mcp__Clarification__Enabled=true misa-agentic-functions:local
 }
 finally {
     Pop-Location

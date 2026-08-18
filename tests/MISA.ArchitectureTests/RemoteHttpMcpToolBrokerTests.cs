@@ -68,7 +68,7 @@ public sealed class RemoteHttpMcpToolBrokerTests
 				DefaultTimeoutMs = 20,
 				AllowedToolsByRoute = new Dictionary<string, string[]>
 				{
-					["knowledge"] = ["knowledge.answer"]
+					["knowledge"] = ["knowledge.mcp"]
 				}
 			});
 
@@ -109,7 +109,7 @@ public sealed class RemoteHttpMcpToolBrokerTests
 	{
 		return new McpToolCallRequest(
 			Route: "knowledge",
-			ToolName: "knowledge.answer",
+			ToolName: "knowledge.mcp",
 			SessionId: "session-1",
 			Input: "what is par");
 	}
@@ -125,7 +125,7 @@ public sealed class RemoteHttpMcpToolBrokerTests
 			DefaultTimeoutMs = 500,
 			AllowedToolsByRoute = new Dictionary<string, string[]>
 			{
-				["knowledge"] = ["knowledge.answer"]
+				["knowledge"] = ["knowledge.mcp"]
 			}
 		};
 
