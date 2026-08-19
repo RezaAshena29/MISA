@@ -7,14 +7,27 @@
 <PageTitle>MISA Chat Assistant</PageTitle>
 
 <div class="misa-workspace">
-	<button type="button" class="misa-launcher" @onclick="OpenChatAsync">
+	<button type="button" class="misa-launcher" @onclick="OpenChatAsync" disabled="@IsLaunchAnimationVisible" aria-busy="@IsLaunchAnimationVisible">
 		<img src="images/misa-chatbot-sparkle.png" alt="" aria-hidden="true" />
 		<span>Chat With MISA Agents</span>
 	</button>
 
+	<div class="misa-workflow-center-shell">
+		<div class="misa-workflow-pinned misa-workflow-pinned--center" role="status" aria-live="polite">
+			<h4>Starting agent workflow</h4>
+			<p>Workflow status stays visible for users during this session.</p>
+			<div class="misa-agent-strip">
+				@for (var i = 0; i < LauncherAgents.Length; i++)
+				{
+					<span class="misa-agent-chip @(i <= PersistentLaunchAgentIndex ? "is-active" : string.Empty)">@LauncherAgents[i]</span>
+				}
+			</div>
+		</div>
+	</div>
+
 	@if (IsLaunchAnimationVisible)
 	{
-		<div class="misa-launch-overlay">
+		<div class="misa-launch-overlay" role="status" aria-live="polite" aria-busy="true">
 			<div class="misa-launch-card">
 				<h3>Starting agent workflow</h3>
 				<p>Connecting orchestration and MCP tools...</p>
@@ -203,40 +216,65 @@
 	private string InputText = string.Empty;
 	private string SessionId = NewSessionId();
 	private CancellationTokenSource? StreamCts;
+	private CancellationTokenSource? LaunchCts;
+	private bool IsDisposed;
 
 	private bool IsSendDisabled => IsProcessing || string.IsNullOrWhiteSpace(InputText);
+	private int PersistentLaunchAgentIndex => IsLaunchAnimationVisible
+		? ActiveLaunchAgentIndex
+		: LauncherAgents.Length - 1;
 
 	public void Dispose()
 	{
+		IsDisposed = true;
+		CancelLaunch();
 		CancelStream();
 	}
 
 	private async Task OpenChatAsync()
 	{
-		if (IsLaunchAnimationVisible || IsChatOpen)
+		if (IsLaunchAnimationVisible || IsChatOpen || IsDisposed)
 		{
 			return;
 		}
 
+		CancelLaunch();
+		LaunchCts = new CancellationTokenSource();
+		var launchToken = LaunchCts.Token;
+
 		IsLaunchAnimationVisible = true;
 		ActiveLaunchAgentIndex = -1;
-		await InvokeAsync(StateHasChanged);
+		await RequestRenderAsync();
 
-		for (var i = 0; i < LauncherAgents.Length; i++)
+		try
 		{
-			ActiveLaunchAgentIndex = i;
-			await InvokeAsync(StateHasChanged);
-			await Task.Delay(280);
-		}
+			for (var i = 0; i < LauncherAgents.Length; i++)
+			{
+				launchToken.ThrowIfCancellationRequested();
+				ActiveLaunchAgentIndex = i;
+				await RequestRenderAsync();
+				await Task.Delay(280, launchToken);
+			}
 
-		await Task.Delay(200);
-		IsLaunchAnimationVisible = false;
-		ActiveLaunchAgentIndex = -1;
-		IsChatOpen = true;
-		IsExpanded = false;
-		IsConsentAccepted = false;
-		StartNewChat();
-		await InvokeAsync(StateHasChanged);
+			await Task.Delay(200, launchToken);
+			launchToken.ThrowIfCancellationRequested();
+
+			IsChatOpen = true;
+			IsExpanded = false;
+			IsConsentAccepted = false;
+			StartNewChat();
+		}
+		catch (OperationCanceledException) when (launchToken.IsCancellationRequested)
+		{
+			// Expected when launch is interrupted by close/dispose.
+		}
+		finally
+		{
+			IsLaunchAnimationVisible = false;
+			ActiveLaunchAgentIndex = -1;
+			CancelLaunch();
+			await RequestRenderAsync();
+		}
 	}
 
 	private void AcceptConsent()
@@ -251,6 +289,7 @@
 
 	private void CloseChat()
 	{
+		CancelLaunch();
 		CancelStream();
 		IsProcessing = false;
 		IsExpanded = false;
@@ -270,6 +309,7 @@
 		Messages.Clear();
 		InputText = string.Empty;
 		SessionId = NewSessionId();
+		IsProcessing = false;
 		ActiveRuntimeAgentIndex = -1;
 	}
 
@@ -295,14 +335,16 @@
 		Messages.Add(ChatMessage.User(message));
 		IsProcessing = true;
 		ActiveRuntimeAgentIndex = 0;
-		await InvokeAsync(StateHasChanged);
+		await RequestRenderAsync();
 
 		string? resultText = null;
 		string? clarificationText = null;
 		string? errorText = null;
+		var wasCanceled = false;
 
 		CancelStream();
-		StreamCts = new CancellationTokenSource();
+		var streamTokenSource = new CancellationTokenSource();
+		StreamCts = streamTokenSource;
 
 		try
 		{
@@ -310,6 +352,11 @@
 				new ChatRequestPayload(Message: message, SessionId: SessionId),
 				async streamEvent =>
 				{
+					if (streamTokenSource.IsCancellationRequested || IsDisposed)
+					{
+						return;
+					}
+
 					var type = streamEvent.Type.ToLowerInvariant();
 
 					switch (type)
@@ -340,42 +387,75 @@
 							break;
 					}
 
-					await InvokeAsync(StateHasChanged);
+					await RequestRenderAsync();
 				},
-				StreamCts.Token);
+				streamTokenSource.Token);
+		}
+		catch (OperationCanceledException) when (streamTokenSource.IsCancellationRequested)
+		{
+			wasCanceled = true;
 		}
 		catch (Exception ex)
 		{
 			errorText = $"Unable to reach chat service. {ex.Message}";
 		}
 
-		if (!string.IsNullOrWhiteSpace(resultText))
+		if (!wasCanceled)
 		{
-			if (TryParseRecommendation(resultText, out var tableData))
+			if (!string.IsNullOrWhiteSpace(resultText))
 			{
-				Messages.Add(ChatMessage.AssistantRecommendation(resultText, tableData));
+				if (TryParseRecommendation(resultText, out var tableData))
+				{
+					Messages.Add(ChatMessage.AssistantRecommendation(resultText, tableData));
+				}
+				else
+				{
+					Messages.Add(ChatMessage.Assistant(resultText));
+				}
+			}
+			else if (!string.IsNullOrWhiteSpace(clarificationText))
+			{
+				Messages.Add(ChatMessage.Assistant(clarificationText));
+			}
+			else if (!string.IsNullOrWhiteSpace(errorText))
+			{
+				Messages.Add(ChatMessage.Assistant($"Error: {errorText}"));
 			}
 			else
 			{
-				Messages.Add(ChatMessage.Assistant(resultText));
+				Messages.Add(ChatMessage.Assistant("No response was returned by the MISA service."));
 			}
 		}
-		else if (!string.IsNullOrWhiteSpace(clarificationText))
+
+		if (ReferenceEquals(StreamCts, streamTokenSource))
 		{
-			Messages.Add(ChatMessage.Assistant(clarificationText));
-		}
-		else if (!string.IsNullOrWhiteSpace(errorText))
-		{
-			Messages.Add(ChatMessage.Assistant($"Error: {errorText}"));
-		}
-		else
-		{
-			Messages.Add(ChatMessage.Assistant("No response was returned by the MISA service."));
+			IsProcessing = false;
+			ActiveRuntimeAgentIndex = -1;
+			streamTokenSource.Dispose();
+			StreamCts = null;
 		}
 
-		IsProcessing = false;
-		ActiveRuntimeAgentIndex = -1;
-		await InvokeAsync(StateHasChanged);
+		await RequestRenderAsync();
+	}
+
+	private void CancelLaunch()
+	{
+		if (LaunchCts is null)
+		{
+			return;
+		}
+
+		try
+		{
+			LaunchCts.Cancel();
+		}
+		catch (ObjectDisposedException)
+		{
+			// Ignore cancellation race during disposal.
+		}
+
+		LaunchCts.Dispose();
+		LaunchCts = null;
 	}
 
 	private void CancelStream()
@@ -396,6 +476,16 @@
 
 		StreamCts.Dispose();
 		StreamCts = null;
+	}
+
+	private Task RequestRenderAsync()
+	{
+		if (IsDisposed)
+		{
+			return Task.CompletedTask;
+		}
+
+		return InvokeAsync(StateHasChanged);
 	}
 
 	private static bool TryParseRecommendation(string markdown, out RecommendationTableData result)

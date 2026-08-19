@@ -41,6 +41,13 @@ a,
     position: relative;
 }
 
+.misa-workflow-center-shell {
+    min-height: calc(100vh - 56px);
+    display: grid;
+    place-items: center;
+    padding: 20px;
+}
+
 .misa-launcher {
     position: fixed;
     right: 28px;
@@ -64,6 +71,11 @@ a,
 .misa-launcher img {
     width: 34px;
     height: 34px;
+}
+
+.misa-launcher:disabled {
+    opacity: 0.82;
+    cursor: wait;
 }
 
 .misa-launch-overlay {
@@ -221,6 +233,32 @@ a,
     padding: 14px 16px;
     border-bottom: 1px solid var(--misa-line);
     background: linear-gradient(180deg, #ffffff 0%, #f7f2e9 100%);
+}
+
+.misa-workflow-pinned {
+    margin: 12px 14px 0;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid #d7d1c6;
+    background: #fff9ef;
+}
+
+.misa-workflow-pinned--center {
+    width: min(760px, calc(100vw - 84px));
+    margin: 0;
+    box-shadow: 0 8px 24px rgba(36, 49, 66, 0.1);
+}
+
+.misa-workflow-pinned h4 {
+    margin: 0;
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 1rem;
+}
+
+.misa-workflow-pinned p {
+    margin: 6px 0 10px;
+    color: var(--misa-soft-ink);
+    font-size: 0.84rem;
 }
 
 .misa-header-brand {
@@ -478,6 +516,15 @@ a,
 @media (max-width: 900px) {
     .misa-workspace {
         padding: 12px;
+    }
+
+    .misa-workflow-center-shell {
+        min-height: calc(100vh - 24px);
+        padding: 8px;
+    }
+
+    .misa-workflow-pinned--center {
+        width: calc(100vw - 32px);
     }
 
     .misa-chat-panel,
