@@ -95,6 +95,23 @@ public interface IAgentRouter
 }
 
 /// <summary>
+/// Route-aware MCP coordinator abstraction for single-path tool invocation.
+/// </summary>
+public interface IMcpCoordinator
+{
+	/// <summary>
+	/// Invokes an MCP tool mapped for the supplied route.
+	/// </summary>
+	Task<McpToolCallResult> InvokeForRouteAsync(
+		string route,
+		ChatRequestDto request,
+		ChatSessionState? priorState,
+		string? input,
+		IReadOnlyDictionary<string, string?>? additionalAttributes,
+		CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Knowledge answer abstraction.
 /// </summary>
 public interface IKnowledgeService
@@ -289,8 +306,31 @@ public static class ApplicationServiceCollectionExtensions
 	public static IServiceCollection AddMisaApplication(this IServiceCollection services)
 	{
 		services.AddSingleton<IMcpToolBroker, NullMcpToolBroker>();
+		services.AddSingleton<IMcpCoordinator, NullMcpCoordinator>();
 		services.AddScoped<IChatPipeline, ChatPipeline>();
 		return services;
+	}
+}
+
+/// <summary>
+/// Default MCP coordinator used when MCP integration is disabled.
+/// </summary>
+public sealed class NullMcpCoordinator : IMcpCoordinator
+{
+	/// <inheritdoc />
+	public Task<McpToolCallResult> InvokeForRouteAsync(
+		string route,
+		ChatRequestDto request,
+		ChatSessionState? priorState,
+		string? input,
+		IReadOnlyDictionary<string, string?>? additionalAttributes,
+		CancellationToken cancellationToken)
+	{
+		return Task.FromResult(
+			McpToolCallResult.Failed(
+				errorCode: "mcp_disabled",
+				errorMessage: "MCP coordinator is not enabled for this environment.",
+				latency: TimeSpan.Zero));
 	}
 }
 

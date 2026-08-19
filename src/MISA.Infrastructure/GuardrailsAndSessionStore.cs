@@ -204,8 +204,10 @@ public static class InfrastructureServiceCollectionExtensions
 		IConfiguration configuration)
 	{
 		services.AddMisaMcp(configuration);
+		services.AddOptions<McpCoordinatorOptions>().Bind(configuration.GetSection("Misa:Mcp:Coordinator"));
 		services.AddOptions<GuardOptions>().Bind(configuration.GetSection("Misa:Guard"));
 		services.AddOptions<SessionStoreOptions>().Bind(configuration.GetSection("Misa:SessionStore"));
+		services.AddSingleton<IMcpCoordinator, McpCoordinator>();
 		services.AddSingleton<IPromptGuard, DefaultPromptGuard>();
 		services.AddSingleton<IResponseGuard, DefaultResponseGuard>();
 		services.AddSingleton<InMemoryChatSessionStore>();

@@ -8,6 +8,7 @@ var app = builder.Build();
 
 var knowledgeService = new KnowledgeService();
 var decisioningService = new RuleBasedDecisioningService();
+const string clarificationPrompt = "I need a bit more to run this case. Could you share age, gender, smoking status, and premium budget?";
 
 app.MapGet("/mcp/health", () =>
 {
@@ -41,7 +42,7 @@ app.MapPost("/mcp/tools/invoke", async (McpInvokeRequest request, CancellationTo
 		Product: product,
 		Language: language);
 
-	if (string.Equals(request.ToolName, "knowledge.answer", StringComparison.OrdinalIgnoreCase))
+	if (IsToolName(request.ToolName, "knowledge.mcp", "knowledge.answer"))
 	{
 		var answer = await knowledgeService.AnswerAsync(chatRequest, cancellationToken).ConfigureAwait(false);
 		return Results.Json(new
@@ -53,13 +54,41 @@ app.MapPost("/mcp/tools/invoke", async (McpInvokeRequest request, CancellationTo
 		});
 	}
 
-	if (string.Equals(request.ToolName, "decisioning.recommendation.table", StringComparison.OrdinalIgnoreCase))
+	if (IsToolName(request.ToolName, "decisioning.mcp", "decisioning.recommendation.table"))
 	{
 		var table = await decisioningService.BuildRecommendationTableAsync(chatRequest, cancellationToken).ConfigureAwait(false);
 		return Results.Json(new
 		{
 			success = true,
 			content = JsonSerializer.Serialize(table),
+			errorCode = (string?)null,
+			errorMessage = (string?)null
+		});
+	}
+
+	if (IsToolName(request.ToolName, "reasoning.mcp", "reasoning.explain"))
+	{
+		var lastRecommendation = GetAttributeValue(request.Attributes, "lastRecommendation");
+		var knowledge = await knowledgeService.AnswerAsync(chatRequest, cancellationToken).ConfigureAwait(false);
+		var content = string.IsNullOrWhiteSpace(lastRecommendation)
+			? "I do not have a prior recommendation in this session yet. " + knowledge
+			: $"Previous recommendation:\n{lastRecommendation}\n\nSupporting explanation:\n{knowledge}";
+
+		return Results.Json(new
+		{
+			success = true,
+			content,
+			errorCode = (string?)null,
+			errorMessage = (string?)null
+		});
+	}
+
+	if (IsToolName(request.ToolName, "clarification.mcp", "clarification.ask"))
+	{
+		return Results.Json(new
+		{
+			success = true,
+			content = clarificationPrompt,
 			errorCode = (string?)null,
 			errorMessage = (string?)null
 		});
@@ -116,6 +145,11 @@ static string? GetAttributeValue(JsonElement? attributes, string key)
 	return value.ValueKind == JsonValueKind.String
 		? value.GetString()
 		: null;
+}
+
+static bool IsToolName(string toolName, params string[] candidates)
+{
+	return candidates.Any(candidate => string.Equals(toolName, candidate, StringComparison.OrdinalIgnoreCase));
 }
 
 public sealed record McpInvokeRequest(

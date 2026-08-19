@@ -236,6 +236,104 @@ public sealed class SseContractParityTests
 	}
 
 	[Fact]
+	public async Task KnowledgeRouteWithCoordinatorUsesSingleMcpPath()
+	{
+		var coordinator = new StubMcpCoordinator((route, _, _, _, _, _) =>
+		{
+			if (string.Equals(route, "knowledge", StringComparison.OrdinalIgnoreCase))
+			{
+				return Task.FromResult(McpToolCallResult.Succeeded("Coordinator knowledge response", TimeSpan.FromMilliseconds(5)));
+			}
+
+			return Task.FromResult(McpToolCallResult.Failed("unsupported_route", route, TimeSpan.FromMilliseconds(1)));
+		});
+
+		await using var runtime = new AkkaClusterExecutionRuntime(
+			new FixedRouteRouter("knowledge"),
+			new ThrowingKnowledgeService(),
+			new StaticDecisioningService(),
+			new InMemoryChatSessionStore(),
+			coordinator,
+			NullLogger<AkkaClusterExecutionRuntime>.Instance);
+
+		var request = new ChatRequestDto("what is participating policy", "session-knowledge-coordinator");
+		var events = await CollectAsync(runtime.ExecuteAsync(request, CancellationToken.None));
+
+		Assert.Equal(2, events.Count);
+		Assert.Equal(ChatEventType.Thinking, events[0].Type);
+		Assert.Equal(ChatEventType.Result, events[1].Type);
+		Assert.Equal("Coordinator knowledge response", events[1].Content);
+		Assert.Contains("knowledge", coordinator.InvokedRoutes, StringComparer.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public async Task ClarificationRouteWithCoordinatorUsesMcpPrompt()
+	{
+		var coordinator = new StubMcpCoordinator((route, _, _, _, _, _) =>
+		{
+			if (string.Equals(route, "clarification", StringComparison.OrdinalIgnoreCase))
+			{
+				return Task.FromResult(McpToolCallResult.Succeeded("Coordinator clarification prompt", TimeSpan.FromMilliseconds(5)));
+			}
+
+			return Task.FromResult(McpToolCallResult.Failed("unsupported_route", route, TimeSpan.FromMilliseconds(1)));
+		});
+
+		await using var runtime = new AkkaClusterExecutionRuntime(
+			new FixedRouteRouter("clarification"),
+			new StaticKnowledgeService(),
+			new StaticDecisioningService(),
+			new InMemoryChatSessionStore(),
+			coordinator,
+			NullLogger<AkkaClusterExecutionRuntime>.Instance);
+
+		var request = new ChatRequestDto("need next inputs", "session-clarification-coordinator");
+		var events = await CollectAsync(runtime.ExecuteAsync(request, CancellationToken.None));
+
+		var clarification = Assert.Single(events, evt => evt.Type == ChatEventType.Clarification);
+		Assert.Equal("Coordinator clarification prompt", clarification.Content);
+		Assert.Contains("clarification", coordinator.InvokedRoutes, StringComparer.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public async Task IllustrationRouteWithCoordinatorUsesMcpForDecisioningAndKnowledge()
+	{
+		var decisioningPayload = System.Text.Json.JsonSerializer.Serialize(BuildMcpDecisioningTable());
+		var coordinator = new StubMcpCoordinator((route, _, _, _, _, _) =>
+		{
+			if (string.Equals(route, "illustration", StringComparison.OrdinalIgnoreCase))
+			{
+				return Task.FromResult(McpToolCallResult.Succeeded(decisioningPayload, TimeSpan.FromMilliseconds(6)));
+			}
+
+			if (string.Equals(route, "knowledge", StringComparison.OrdinalIgnoreCase))
+			{
+				return Task.FromResult(McpToolCallResult.Succeeded("Coordinator knowledge note", TimeSpan.FromMilliseconds(6)));
+			}
+
+			return Task.FromResult(McpToolCallResult.Failed("unsupported_route", route, TimeSpan.FromMilliseconds(1)));
+		});
+
+		await using var runtime = new AkkaClusterExecutionRuntime(
+			new FixedRouteRouter("illustration"),
+			new ThrowingKnowledgeService(),
+			new ThrowingDecisioningService(),
+			new InMemoryChatSessionStore(),
+			coordinator,
+			NullLogger<AkkaClusterExecutionRuntime>.Instance);
+
+		var request = new ChatRequestDto("male age 45 non-smoker budget $100k", "session-illustration-coordinator");
+		var events = await CollectAsync(runtime.ExecuteAsync(request, CancellationToken.None));
+
+		var result = Assert.Single(events, evt => evt.Type == ChatEventType.Result);
+		var resultText = result.Content?.ToString() ?? string.Empty;
+		Assert.Contains("MCP decisioning scenario", resultText, StringComparison.Ordinal);
+		Assert.Contains("Coordinator knowledge note", resultText, StringComparison.Ordinal);
+		Assert.Contains("illustration", coordinator.InvokedRoutes, StringComparer.OrdinalIgnoreCase);
+		Assert.Contains("knowledge", coordinator.InvokedRoutes, StringComparer.OrdinalIgnoreCase);
+	}
+
+	[Fact]
 	public async Task KnowledgeRouteMcpDisabledAndEnabledKeepSameEventSequence()
 	{
 		var disabledKnowledge = new McpKnowledgeServiceDecorator(
@@ -452,6 +550,31 @@ public sealed class SseContractParityTests
 		public Task<McpToolCallResult> InvokeAsync(McpToolCallRequest request, CancellationToken cancellationToken)
 		{
 			throw new InvalidOperationException("MCP broker must not be called when Knowledge MCP is disabled.");
+		}
+	}
+
+	private sealed class StubMcpCoordinator : IMcpCoordinator
+	{
+		private readonly Func<string, ChatRequestDto, ChatSessionState?, string?, IReadOnlyDictionary<string, string?>?, CancellationToken, Task<McpToolCallResult>> _handler;
+
+		public StubMcpCoordinator(
+			Func<string, ChatRequestDto, ChatSessionState?, string?, IReadOnlyDictionary<string, string?>?, CancellationToken, Task<McpToolCallResult>> handler)
+		{
+			_handler = handler;
+		}
+
+		public List<string> InvokedRoutes { get; } = [];
+
+		public Task<McpToolCallResult> InvokeForRouteAsync(
+			string route,
+			ChatRequestDto request,
+			ChatSessionState? priorState,
+			string? input,
+			IReadOnlyDictionary<string, string?>? additionalAttributes,
+			CancellationToken cancellationToken)
+		{
+			InvokedRoutes.Add(route);
+			return _handler(route, request, priorState, input, additionalAttributes, cancellationToken);
 		}
 	}
 

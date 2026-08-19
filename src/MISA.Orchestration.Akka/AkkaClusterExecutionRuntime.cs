@@ -32,6 +32,32 @@ public sealed partial class AkkaClusterExecutionRuntime : IAgentExecutionRuntime
 		IDecisioningService decisioningService,
 		IChatSessionStore sessionStore,
 		ILogger<AkkaClusterExecutionRuntime> logger)
+		: this(agentRouter, knowledgeService, decisioningService, sessionStore, mcpCoordinator: null, logger, true)
+	{
+	}
+
+	/// <summary>
+	/// Creates and starts the cluster actor system with MCP coordinator support.
+	/// </summary>
+	public AkkaClusterExecutionRuntime(
+		IAgentRouter agentRouter,
+		IKnowledgeService knowledgeService,
+		IDecisioningService decisioningService,
+		IChatSessionStore sessionStore,
+		IMcpCoordinator mcpCoordinator,
+		ILogger<AkkaClusterExecutionRuntime> logger)
+		: this(agentRouter, knowledgeService, decisioningService, sessionStore, mcpCoordinator, logger, true)
+	{
+	}
+
+	private AkkaClusterExecutionRuntime(
+		IAgentRouter agentRouter,
+		IKnowledgeService knowledgeService,
+		IDecisioningService decisioningService,
+		IChatSessionStore sessionStore,
+		IMcpCoordinator? mcpCoordinator,
+		ILogger<AkkaClusterExecutionRuntime> logger,
+		bool _)
 	{
 		_logger = logger;
 
@@ -49,7 +75,7 @@ akka {
 
 		_actorSystem = ActorSystem.Create("misa-agentic-system", config);
 		_coordinator = _actorSystem.ActorOf(
-			Props.Create(() => new OrchestratorAgentActor(agentRouter, knowledgeService, decisioningService, sessionStore)),
+			Props.Create(() => new OrchestratorAgentActor(agentRouter, knowledgeService, decisioningService, sessionStore, mcpCoordinator)),
 			"orchestrator-agent");
 
 		AkkaRuntimeLog.RuntimeInitialized(_logger);
@@ -156,6 +182,7 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 	private readonly IKnowledgeService _knowledgeService;
 	private readonly IDecisioningService _decisioningService;
 	private readonly IChatSessionStore _sessionStore;
+	private readonly IMcpCoordinator? _mcpCoordinator;
 	private readonly IActorRef _intentAnalyzerAgent;
 	private readonly IActorRef _contextMemoryAgent;
 	private readonly IActorRef _clarifierAgent;
@@ -166,17 +193,23 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 	private readonly IActorRef _faninAggregatorAgent;
 	private readonly IActorRef _decisionRankerAgent;
 	private readonly IActorRef _responseComposerAgent;
+	private static readonly JsonSerializerOptions RecommendationTableJsonOptions = new(JsonSerializerDefaults.Web)
+	{
+		PropertyNameCaseInsensitive = true
+	};
 
 	public OrchestratorAgentActor(
 		IAgentRouter agentRouter,
 		IKnowledgeService knowledgeService,
 		IDecisioningService decisioningService,
-		IChatSessionStore sessionStore)
+		IChatSessionStore sessionStore,
+		IMcpCoordinator? mcpCoordinator)
 	{
 		_agentRouter = agentRouter;
 		_knowledgeService = knowledgeService;
 		_decisioningService = decisioningService;
 		_sessionStore = sessionStore;
+		_mcpCoordinator = mcpCoordinator;
 		var calcWorkerCount = ReadPositiveIntSetting(CalcWorkerCountEnvVar, DefaultCalcWorkerCount);
 		var calcWorkerTimeout = TimeSpan.FromMilliseconds(ReadPositiveIntSetting(CalcWorkerTimeoutMsEnvVar, DefaultCalcWorkerTimeoutMs));
 		var calcBranchTimeout = TimeSpan.FromMilliseconds(ReadPositiveIntSetting(CalcBranchTimeoutMsEnvVar, DefaultCalcBranchTimeoutMs));
@@ -186,8 +219,8 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		_clarifierAgent = Context.ActorOf(Props.Create(() => new ClarifierAgentActor()), "clarifier-agent");
 		_illustrationPlannerAgent = Context.ActorOf(Props.Create(() => new IllustrationPlannerAgentActor()), "illustration-planner-agent");
 		_validationGuardAgent = Context.ActorOf(Props.Create(() => new ValidationGuardAgentActor()), "validation-guard-agent");
-		_calcWorkerPoolAgent = Context.ActorOf(Props.Create(() => new CalcWorkerPoolAgentActor(_decisioningService, calcWorkerCount, calcWorkerTimeout)), "calc-worker-pool-agent");
-		_fanoutDispatcherAgent = Context.ActorOf(Props.Create(() => new FanoutDispatcherAgentActor(_calcWorkerPoolAgent, _knowledgeService, calcBranchTimeout, knowledgeTimeout)), "fanout-dispatcher-agent");
+		_calcWorkerPoolAgent = Context.ActorOf(Props.Create(() => new CalcWorkerPoolAgentActor(_decisioningService, _mcpCoordinator, calcWorkerCount, calcWorkerTimeout)), "calc-worker-pool-agent");
+		_fanoutDispatcherAgent = Context.ActorOf(Props.Create(() => new FanoutDispatcherAgentActor(_calcWorkerPoolAgent, _knowledgeService, _mcpCoordinator, calcBranchTimeout, knowledgeTimeout)), "fanout-dispatcher-agent");
 		_faninAggregatorAgent = Context.ActorOf(Props.Create(() => new FaninAggregatorAgentActor()), "fanin-aggregator-agent");
 		_decisionRankerAgent = Context.ActorOf(Props.Create(() => new DecisionRankerAgentActor()), "decision-ranker-agent");
 		_responseComposerAgent = Context.ActorOf(Props.Create(() => new ResponseComposerAgentActor()), "response-composer-agent");
@@ -204,8 +237,8 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 	private sealed record BuildClarificationCommand();
 	private sealed record BuildAssumptionsCommand(ChatRequestDto Request);
 	private sealed record ValidateIllustrationInputCommand(ChatRequestDto Request);
-	private sealed record ExecuteCalculationCommand(ChatRequestDto Request);
-	private sealed record DispatchFanoutCommand(ChatRequestDto Request);
+	private sealed record ExecuteCalculationCommand(ChatRequestDto Request, ChatSessionState? PriorState);
+	private sealed record DispatchFanoutCommand(ChatRequestDto Request, ChatSessionState? PriorState);
 	private sealed record AggregateFanoutCommand(FanoutResult Result);
 	private sealed record RankRecommendationCommand(RecommendationTable Recommendation);
 	private sealed record ComposeResponseCommand(RecommendationTable Recommendation, string Knowledge);
@@ -247,7 +280,7 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		}
 
 		replyTo.Tell(new ChatExecutionResult(
-			await RunIllustrationRouteAsync(request, cancellationToken).ConfigureAwait(false)));
+			await RunIllustrationRouteAsync(request, routeResolution.PriorState, cancellationToken).ConfigureAwait(false)));
 	}
 
 	private async Task<RouteResolution> RunIntentAnalyzerAndContextMemoryAgentsAsync(
@@ -266,7 +299,7 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		ChatSessionState? priorState,
 		CancellationToken cancellationToken)
 	{
-		var knowledge = await _knowledgeService.AnswerAsync(request, cancellationToken).ConfigureAwait(false);
+		var knowledge = await ResolveKnowledgeContentAsync(request, priorState, cancellationToken).ConfigureAwait(false);
 		await _contextMemoryAgent
 			.Ask<bool>(
 				new SaveSessionStateCommand(new ChatSessionState(request.SessionId, LastRoute: KnowledgeRoute, LastRecommendation: priorState?.LastRecommendation)),
@@ -285,7 +318,7 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		ChatSessionState? priorState,
 		CancellationToken cancellationToken)
 	{
-		var reasoningContent = await BuildReasoningContentAsync(request, priorState, cancellationToken).ConfigureAwait(false);
+		var reasoningContent = await ResolveReasoningContentAsync(request, priorState, cancellationToken).ConfigureAwait(false);
 		await _contextMemoryAgent
 			.Ask<bool>(
 				new SaveSessionStateCommand(new ChatSessionState(request.SessionId, LastRoute: ReasoningRoute, LastRecommendation: priorState?.LastRecommendation)),
@@ -310,9 +343,7 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 				cancellationToken)
 			.ConfigureAwait(false);
 
-		var clarificationPrompt = await _clarifierAgent
-			.Ask<string>(new BuildClarificationCommand(), cancellationToken)
-			.ConfigureAwait(false);
+		var clarificationPrompt = await ResolveClarificationPromptAsync(request, priorState, cancellationToken).ConfigureAwait(false);
 
 		return
 		[
@@ -324,9 +355,10 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 
 	private async Task<IReadOnlyList<ChatEventEnvelope>> RunIllustrationRouteAsync(
 		ChatRequestDto request,
+		ChatSessionState? priorState,
 		CancellationToken cancellationToken)
 	{
-		var illustrationEvents = await BuildIllustrationEventsAsync(request, cancellationToken).ConfigureAwait(false);
+		var illustrationEvents = await BuildIllustrationEventsAsync(request, priorState, cancellationToken).ConfigureAwait(false);
 		var lastRecommendation = illustrationEvents
 			.LastOrDefault(evt => evt.Type == ChatEventType.Result)?.Content?.ToString();
 
@@ -341,6 +373,7 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 
 	private async Task<IReadOnlyList<ChatEventEnvelope>> BuildIllustrationEventsAsync(
 		ChatRequestDto request,
+		ChatSessionState? priorState,
 		CancellationToken cancellationToken)
 	{
 		var events = new List<ChatEventEnvelope>
@@ -380,7 +413,7 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		}
 
 		var fanoutResult = await _fanoutDispatcherAgent
-			.Ask<FanoutResult>(new DispatchFanoutCommand(request), cancellationToken)
+			.Ask<FanoutResult>(new DispatchFanoutCommand(request, priorState), cancellationToken)
 			.ConfigureAwait(false);
 		var faninResult = await _faninAggregatorAgent
 			.Ask<FanoutResult>(new AggregateFanoutCommand(fanoutResult), cancellationToken)
@@ -509,12 +542,16 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		private readonly IActorRef _calcWorkerRouter;
 		private readonly TimeSpan _workerAskTimeout;
 
-		public CalcWorkerPoolAgentActor(IDecisioningService decisioningService, int workerCount, TimeSpan workerAskTimeout)
+		public CalcWorkerPoolAgentActor(
+			IDecisioningService decisioningService,
+			IMcpCoordinator? mcpCoordinator,
+			int workerCount,
+			TimeSpan workerAskTimeout)
 		{
 			_workerAskTimeout = workerAskTimeout;
 			_calcWorkerRouter = Context.ActorOf(
 				new RoundRobinPool(workerCount)
-					.Props(Props.Create(() => new CalcWorkerAgentActor(decisioningService))),
+					.Props(Props.Create(() => new CalcWorkerAgentActor(decisioningService, mcpCoordinator))),
 				"calc-worker-router");
 
 			Receive<ExecuteCalculationCommand>(Handle);
@@ -532,16 +569,39 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 	private sealed class CalcWorkerAgentActor : ReceiveActor
 	{
 		private readonly IDecisioningService _decisioningService;
+		private readonly IMcpCoordinator? _mcpCoordinator;
 
-		public CalcWorkerAgentActor(IDecisioningService decisioningService)
+		public CalcWorkerAgentActor(IDecisioningService decisioningService, IMcpCoordinator? mcpCoordinator)
 		{
 			_decisioningService = decisioningService;
+			_mcpCoordinator = mcpCoordinator;
 			ReceiveAsync<ExecuteCalculationCommand>(HandleAsync);
 		}
 
 		private async Task HandleAsync(ExecuteCalculationCommand command)
 		{
 			var replyTo = Sender;
+
+			if (_mcpCoordinator is not null)
+			{
+				var mcpResult = await _mcpCoordinator
+					.InvokeForRouteAsync(
+						IllustrationRoute,
+						command.Request,
+						command.PriorState,
+						command.Request.Message,
+						null,
+						CancellationToken.None)
+					.ConfigureAwait(false);
+
+				if (mcpResult.Success
+					&& TryDeserializeRecommendationTable(mcpResult.Content, out var mcpRecommendation))
+				{
+					replyTo.Tell(mcpRecommendation);
+					return;
+				}
+			}
+
 			var recommendation = await _decisioningService
 				.BuildRecommendationTableAsync(command.Request, CancellationToken.None)
 				.ConfigureAwait(false);
@@ -553,6 +613,7 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 	{
 		private readonly IActorRef _calcWorkerPoolAgent;
 		private readonly IKnowledgeService _knowledgeService;
+		private readonly IMcpCoordinator? _mcpCoordinator;
 		private readonly TimeSpan _calcBranchTimeout;
 		private readonly TimeSpan _knowledgeTimeout;
 		private const string FallbackKnowledgeMessage = "Supporting knowledge is temporarily unavailable; recommendation output was generated using fallback resiliency mode.";
@@ -560,11 +621,13 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		public FanoutDispatcherAgentActor(
 			IActorRef calcWorkerPoolAgent,
 			IKnowledgeService knowledgeService,
+			IMcpCoordinator? mcpCoordinator,
 			TimeSpan calcBranchTimeout,
 			TimeSpan knowledgeTimeout)
 		{
 			_calcWorkerPoolAgent = calcWorkerPoolAgent;
 			_knowledgeService = knowledgeService;
+			_mcpCoordinator = mcpCoordinator;
 			_calcBranchTimeout = calcBranchTimeout;
 			_knowledgeTimeout = knowledgeTimeout;
 			ReceiveAsync<DispatchFanoutCommand>(HandleAsync);
@@ -575,8 +638,11 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		private async Task HandleAsync(DispatchFanoutCommand command)
 		{
 			var replyTo = Sender;
-			var recommendationTask = _calcWorkerPoolAgent.Ask<RecommendationTable>(new ExecuteCalculationCommand(command.Request), _calcBranchTimeout, CancellationToken.None);
-			var knowledgeTask = _knowledgeService.AnswerAsync(command.Request, CancellationToken.None);
+			var recommendationTask = _calcWorkerPoolAgent.Ask<RecommendationTable>(
+				new ExecuteCalculationCommand(command.Request, command.PriorState),
+				_calcBranchTimeout,
+				CancellationToken.None);
+			var knowledgeTask = ResolveKnowledgeAsync(command.Request, command.PriorState);
 
 			var recommendationAttemptTask = TryResolveBranchAsync(recommendationTask, "calculation branch");
 			var knowledgeAttemptTask = TryResolveBranchAsync(knowledgeTask, _knowledgeTimeout, "knowledge branch");
@@ -614,6 +680,29 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 				UsedRecommendationFallback: usedRecommendationFallback,
 				UsedKnowledgeFallback: usedKnowledgeFallback,
 				Warnings: warnings));
+		}
+
+		private async Task<string> ResolveKnowledgeAsync(ChatRequestDto request, ChatSessionState? priorState)
+		{
+			if (_mcpCoordinator is not null)
+			{
+				var mcpResult = await _mcpCoordinator
+					.InvokeForRouteAsync(
+						KnowledgeRoute,
+						request,
+						priorState,
+						request.Message,
+						null,
+						CancellationToken.None)
+					.ConfigureAwait(false);
+
+				if (mcpResult.Success && !string.IsNullOrWhiteSpace(mcpResult.Content))
+				{
+					return mcpResult.Content;
+				}
+			}
+
+			return await _knowledgeService.AnswerAsync(request, CancellationToken.None).ConfigureAwait(false);
 		}
 
 		private static async Task<BranchAttempt<T>> TryResolveBranchAsync<T>(Task<T> branchTask, TimeSpan timeout, string branchName)
@@ -717,6 +806,122 @@ internal sealed class OrchestratorAgentActor : ReceiveActor
 		{
 			Receive<ComposeResponseCommand>(command =>
 				Sender.Tell(ChatEventEnvelope.Text(ChatEventType.Result, FormatIllustrationResultMarkdown(command.Recommendation, command.Knowledge))));
+		}
+	}
+
+	private async Task<string> ResolveKnowledgeContentAsync(
+		ChatRequestDto request,
+		ChatSessionState? priorState,
+		CancellationToken cancellationToken)
+	{
+		var mcpResult = await TryInvokeMcpRouteAsync(
+			KnowledgeRoute,
+			request,
+			priorState,
+			additionalAttributes: null,
+			cancellationToken).ConfigureAwait(false);
+
+		if (mcpResult.Success && !string.IsNullOrWhiteSpace(mcpResult.Content))
+		{
+			return mcpResult.Content;
+		}
+
+		return await _knowledgeService.AnswerAsync(request, cancellationToken).ConfigureAwait(false);
+	}
+
+	private async Task<string> ResolveReasoningContentAsync(
+		ChatRequestDto request,
+		ChatSessionState? priorState,
+		CancellationToken cancellationToken)
+	{
+		var mcpResult = await TryInvokeMcpRouteAsync(
+			ReasoningRoute,
+			request,
+			priorState,
+			additionalAttributes: new Dictionary<string, string?>
+			{
+				["lastRecommendation"] = priorState?.LastRecommendation
+			},
+			cancellationToken).ConfigureAwait(false);
+
+		if (mcpResult.Success && !string.IsNullOrWhiteSpace(mcpResult.Content))
+		{
+			return mcpResult.Content;
+		}
+
+		return await BuildReasoningContentAsync(request, priorState, cancellationToken).ConfigureAwait(false);
+	}
+
+	private async Task<string> ResolveClarificationPromptAsync(
+		ChatRequestDto request,
+		ChatSessionState? priorState,
+		CancellationToken cancellationToken)
+	{
+		var mcpResult = await TryInvokeMcpRouteAsync(
+			ClarificationRoute,
+			request,
+			priorState,
+			additionalAttributes: null,
+			cancellationToken).ConfigureAwait(false);
+
+		if (mcpResult.Success && !string.IsNullOrWhiteSpace(mcpResult.Content))
+		{
+			return mcpResult.Content;
+		}
+
+		return await _clarifierAgent
+			.Ask<string>(new BuildClarificationCommand(), cancellationToken)
+			.ConfigureAwait(false);
+	}
+
+	private async Task<McpToolCallResult> TryInvokeMcpRouteAsync(
+		string route,
+		ChatRequestDto request,
+		ChatSessionState? priorState,
+		IReadOnlyDictionary<string, string?>? additionalAttributes,
+		CancellationToken cancellationToken)
+	{
+		if (_mcpCoordinator is null)
+		{
+			return McpToolCallResult.Failed(
+				errorCode: "coordinator_unavailable",
+				errorMessage: "MCP coordinator is not configured.",
+				latency: TimeSpan.Zero);
+		}
+
+		return await _mcpCoordinator
+			.InvokeForRouteAsync(
+				route,
+				request,
+				priorState,
+				request.Message,
+				additionalAttributes,
+				cancellationToken)
+			.ConfigureAwait(false);
+	}
+
+	private static bool TryDeserializeRecommendationTable(string? payload, out RecommendationTable recommendation)
+	{
+		recommendation = default!;
+		if (string.IsNullOrWhiteSpace(payload))
+		{
+			return false;
+		}
+
+		try
+		{
+			var parsed = JsonSerializer.Deserialize<RecommendationTable>(payload, RecommendationTableJsonOptions);
+			if (parsed is null || parsed.Columns.Count == 0)
+			{
+				return false;
+			}
+
+			recommendation = parsed;
+			return true;
+		}
+		catch (JsonException)
+		{
+			return false;
 		}
 	}
 
