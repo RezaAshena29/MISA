@@ -10,3 +10,7 @@
 *.suo
 *.userosscache
 *.sln.docstates
+
+# Local MISA.UI runtime logs
+MISA.UI/misa-ui*.stdout.log
+MISA.UI/misa-ui*.stderr.log
