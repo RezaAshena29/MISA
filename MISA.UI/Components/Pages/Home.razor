@@ -47,9 +47,9 @@
 			@if (!IsConsentAccepted)
 			{
 				<div class="misa-consent-screen">
-					<div class="misa-consent-brand">
-						<img src="images/misa-chatbot-sparkle.png" alt="" aria-hidden="true" class="misa-consent-sparkle" />
-						<img src="images/misa-logo.png" alt="MISA" class="misa-consent-logo" />
+					<div class="misa-consent-mini-brand">
+						<img src="images/misa-chatbot-sparkle.png" alt="" aria-hidden="true" />
+						<span>MISA</span>
 					</div>
 
 					<h2>Welcome to Manulife Illustrations Solution Assistant</h2>
@@ -73,12 +73,21 @@
 				<div class="misa-chat-header">
 					<div class="misa-header-brand">
 						<img src="images/misa-chatbot-sparkle.png" alt="" aria-hidden="true" />
-						<img src="images/misa-logo.png" alt="MISA" />
+						<span>MISA</span>
 					</div>
 					<div class="misa-header-actions">
-						<button type="button" title="New chat" @onclick="StartNewChat">New</button>
-						<button type="button" title="Expand" @onclick="ToggleExpand">@(IsExpanded ? "Fit" : "Max")</button>
-						<button type="button" title="Close" @onclick="CloseChat">Close</button>
+						<button type="button" title="New chat" @onclick="StartNewChat" class="misa-icon-button">
+							<img src="images/misa-chatbot-sparkle.png" alt="" aria-hidden="true" class="misa-action-icon" />
+							<span>New</span>
+						</button>
+						<button type="button" title="Expand" @onclick="ToggleExpand" class="misa-icon-button">
+							<img src="images/misa-chatbot-sparkle.png" alt="" aria-hidden="true" class="misa-action-icon" />
+							<span>@(IsExpanded ? "Fit" : "Max")</span>
+						</button>
+						<button type="button" title="Close" @onclick="CloseChat" class="misa-icon-button">
+							<img src="images/misa-chatbot-sparkle.png" alt="" aria-hidden="true" class="misa-action-icon" />
+							<span>Close</span>
+						</button>
 					</div>
 				</div>
 
@@ -501,7 +510,7 @@
 		var title = normalizedLines.FirstOrDefault(line => line.StartsWith("**", StringComparison.Ordinal) && line.EndsWith("**", StringComparison.Ordinal));
 		title = string.IsNullOrWhiteSpace(title)
 			? "Recommendation"
-			: title.Trim('*').Trim();
+			: CleanMarkdownText(title.Trim('*').Trim());
 
 		var tableStart = -1;
 		for (var i = 0; i < normalizedLines.Count - 1; i++)
@@ -556,25 +565,25 @@
 
 			if (line.StartsWith("- ", StringComparison.Ordinal))
 			{
-				notes.Add(line[2..].Trim());
+				notes.Add(CleanMarkdownText(line[2..].Trim()));
 				continue;
 			}
 
 			if (line.StartsWith("Supporting note:", StringComparison.OrdinalIgnoreCase))
 			{
-				supportingNote = line;
+				supportingNote = CleanMarkdownText(line);
 				continue;
 			}
 
 			if (line.StartsWith("Source:", StringComparison.OrdinalIgnoreCase))
 			{
-				source = line;
+				source = CleanMarkdownText(line);
 				continue;
 			}
 
 			if (line.StartsWith("_", StringComparison.Ordinal) && line.EndsWith("_", StringComparison.Ordinal) && line.Length > 2)
 			{
-				notes.Add(line.Trim('_').Trim());
+				notes.Add(CleanMarkdownText(line.Trim('_').Trim()));
 			}
 		}
 
@@ -589,6 +598,19 @@
 		return true;
 	}
 
+	private static string CleanMarkdownText(string value)
+	{
+		if (string.IsNullOrWhiteSpace(value))
+		{
+			return string.Empty;
+		}
+
+		return value
+			.Replace("**", string.Empty, StringComparison.Ordinal)
+			.Replace("__", string.Empty, StringComparison.Ordinal)
+			.Trim();
+	}
+
 	private static IReadOnlyList<string> ParseTableRow(string row)
 	{
 		var parts = row.Split('|', StringSplitOptions.None);
@@ -600,7 +622,7 @@
 		var cells = new List<string>(parts.Length - 2);
 		for (var index = 1; index < parts.Length - 1; index++)
 		{
-			cells.Add(parts[index].Trim().Replace("\\|", "|", StringComparison.Ordinal));
+			cells.Add(CleanMarkdownText(parts[index].Trim().Replace("\\|", "|", StringComparison.Ordinal)));
 		}
 
 		return cells;

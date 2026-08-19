@@ -1,17 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap');
 
 :root {
-    --misa-ink: #19202a;
-    --misa-soft-ink: #4f5d73;
-    --misa-brand: #0b6f66;
-    --misa-brand-deep: #09514b;
-    --misa-accent: #f2b705;
-    --misa-wash: #f6f2eb;
-    --misa-panel: #fffdf9;
-    --misa-line: #d7d2c9;
-    --misa-user-bubble: #123553;
-    --misa-assistant-bubble: #e9f3f4;
-    --misa-shadow: 0 20px 50px rgba(21, 34, 56, 0.18);
+    --misa-ink: #1f2b24;
+    --misa-soft-ink: #617169;
+    --misa-brand: #1e9a70;
+    --misa-brand-deep: #0f5a45;
+    --misa-brand-header: #0f4539;
+    --misa-panel: #ffffff;
+    --misa-line: #dce5df;
+    --misa-user-bubble: #26a26a;
+    --misa-assistant-bubble: #f5f8f6;
+    --misa-shadow: 0 14px 28px rgba(19, 42, 33, 0.08);
 }
 
 * {
@@ -22,12 +21,9 @@ html,
 body {
     margin: 0;
     min-height: 100%;
-    font-family: 'IBM Plex Sans', 'Segoe UI', Tahoma, sans-serif;
+    font-family: 'Source Sans 3', 'Segoe UI', Tahoma, sans-serif;
     color: var(--misa-ink);
-    background:
-        radial-gradient(circle at 82% -5%, rgba(11, 111, 102, 0.22), transparent 36%),
-        radial-gradient(circle at 8% 95%, rgba(242, 183, 5, 0.2), transparent 34%),
-        linear-gradient(135deg, #f3eee5 0%, #e8f2f4 48%, #f6f0e8 100%);
+    background: linear-gradient(180deg, #ffffff 0%, #f5f7f6 100%);
 }
 
 a,
@@ -37,40 +33,40 @@ a,
 
 .misa-workspace {
     min-height: 100vh;
-    padding: 28px;
+    padding: 16px 20px 96px;
     position: relative;
 }
 
 .misa-workflow-center-shell {
-    min-height: calc(100vh - 56px);
+    min-height: 220px;
     display: grid;
     place-items: center;
-    padding: 20px;
+    padding: 8px 20px 18px;
 }
 
 .misa-launcher {
     position: fixed;
-    right: 28px;
-    bottom: 28px;
+    right: 18px;
+    bottom: 18px;
     border: 0;
     border-radius: 999px;
-    background: linear-gradient(120deg, var(--misa-brand), var(--misa-brand-deep));
+    background: linear-gradient(120deg, #2aad75, #198860);
     color: #ffffff;
     font-weight: 700;
-    font-size: 0.92rem;
-    letter-spacing: 0.02em;
+    font-size: 0.82rem;
+    letter-spacing: 0.01em;
     display: inline-flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 18px 12px 12px;
+    gap: 8px;
+    padding: 10px 14px 10px 10px;
     box-shadow: var(--misa-shadow);
     cursor: pointer;
-    z-index: 14;
+    z-index: 20;
 }
 
 .misa-launcher img {
-    width: 34px;
-    height: 34px;
+    width: 24px;
+    height: 24px;
 }
 
 .misa-launcher:disabled {
@@ -81,26 +77,26 @@ a,
 .misa-launch-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(17, 29, 43, 0.45);
-    backdrop-filter: blur(4px);
+    background: rgba(22, 38, 31, 0.28);
+    backdrop-filter: blur(2px);
     display: grid;
     place-items: center;
-    z-index: 12;
+    z-index: 40;
 }
 
 .misa-launch-card {
     width: min(560px, calc(100vw - 42px));
-    padding: 26px;
-    border-radius: 24px;
-    background: #fdf8f0;
+    padding: 24px;
+    border-radius: 14px;
+    background: #ffffff;
     border: 1px solid var(--misa-line);
     box-shadow: var(--misa-shadow);
 }
 
 .misa-launch-card h3 {
     margin: 0;
-    font-size: 1.35rem;
-    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 1.1rem;
+    font-family: 'Source Serif 4', Georgia, serif;
 }
 
 .misa-launch-card p {
@@ -111,18 +107,18 @@ a,
 .misa-agent-strip {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
 }
 
 .misa-agent-chip {
     border-radius: 999px;
-    border: 1px solid #9ab5b1;
-    padding: 7px 12px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    background: #edf3f3;
-    color: #3d4f62;
+    border: 1px solid #cfdcd5;
+    padding: 6px 11px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    background: #f3f7f5;
+    color: #5a6c63;
     transition: transform 0.2s ease, background-color 0.2s ease;
 }
 
@@ -130,196 +126,209 @@ a,
     background: var(--misa-brand);
     color: #ffffff;
     border-color: var(--misa-brand);
-    transform: translateY(-2px);
+    transform: translateY(-1px);
 }
 
 .misa-chat-panel {
     position: fixed;
-    right: 28px;
-    bottom: 88px;
-    width: min(540px, calc(100vw - 28px));
-    max-height: calc(100vh - 118px);
-    height: 760px;
+    right: 20px;
+    top: 80px;
+    bottom: 18px;
+    width: clamp(340px, 23vw, 390px);
+    height: auto;
+    min-height: 0;
+    max-height: none;
     display: grid;
     grid-template-rows: auto 1fr auto auto;
-    border-radius: 24px;
-    border: 1px solid var(--misa-line);
-    background: var(--misa-panel);
-    box-shadow: var(--misa-shadow);
+    border-radius: 16px;
+    border: 1px solid #e3e7e4;
+    background: #ffffff;
+    box-shadow: 0 14px 34px rgba(20, 38, 30, 0.16);
     overflow: hidden;
-    z-index: 13;
-    transform-origin: bottom right;
+    z-index: 30;
+    transform-origin: top right;
     animation: misaPanelIn 0.24s ease;
 }
 
 .misa-chat-panel--expanded {
-    width: min(1150px, calc(100vw - 34px));
-    height: min(88vh, 900px);
-    right: 18px;
-    bottom: 18px;
+    width: min(70vw, 1120px);
+    top: 72px;
+    bottom: 16px;
+    right: 16px;
 }
 
 .misa-consent-screen {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    text-align: center;
-    padding: 34px 32px;
-    gap: 14px;
+    align-items: stretch;
+    text-align: left;
+    padding: 22px 24px 20px;
+    gap: 12px;
     overflow: auto;
+    background: #ffffff;
 }
 
-.misa-consent-brand {
-    position: relative;
-    margin-top: 8px;
+.misa-consent-mini-brand {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: 2px;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #4f5cc8;
 }
 
-.misa-consent-sparkle {
-    position: absolute;
-    width: 106px;
-    left: -40px;
-    top: -10px;
-}
-
-.misa-consent-logo {
-    width: 112px;
+.misa-consent-mini-brand img {
+    width: 20px;
+    height: 20px;
 }
 
 .misa-consent-screen h2 {
-    margin: 12px 0 2px;
-    font-family: 'DM Serif Display', Georgia, serif;
-    font-size: 1.42rem;
-    line-height: 1.25;
-    color: #0f1e34;
+    margin: 2px 0 0;
+    text-align: center;
+    font-weight: 700;
+    font-size: 1.05rem;
+    line-height: 1.3;
+    color: #2f3733;
 }
 
 .misa-consent-screen p {
     margin: 0;
-    color: var(--misa-soft-ink);
-    line-height: 1.55;
-    font-size: 0.95rem;
+    color: #5f6d67;
+    line-height: 1.38;
+    font-size: 0.86rem;
 }
 
 .misa-consent-actions {
-    display: flex;
-    gap: 14px;
-    margin-top: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: auto;
+    padding-top: 12px;
 }
 
 .misa-consent-actions button {
-    min-width: 128px;
-    border-radius: 999px;
+    width: 100%;
+    min-width: 0;
+    border-radius: 2px;
     border: 1px solid transparent;
-    padding: 10px 16px;
+    padding: 10px 14px;
     cursor: pointer;
     font-weight: 700;
+    font-size: 0.9rem;
 }
 
 .btn-decline {
-    border-color: #c7bfaf;
-    background: #fff9ef;
-    color: #51473a;
+    border-color: #d54f3e;
+    background: #ffffff;
+    color: #d54f3e;
 }
 
 .btn-agree {
-    background: linear-gradient(120deg, var(--misa-brand), var(--misa-brand-deep));
-    color: #fff;
+    border-color: #c84b3a;
+    background: #c84b3a;
+    color: #ffffff;
 }
 
 .misa-chat-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--misa-line);
-    background: linear-gradient(180deg, #ffffff 0%, #f7f2e9 100%);
+    padding: 10px 12px;
+    border-bottom: 1px solid #e7ece9;
+    background: #ffffff;
 }
 
 .misa-workflow-pinned {
-    margin: 12px 14px 0;
-    padding: 12px;
-    border-radius: 14px;
-    border: 1px solid #d7d1c6;
-    background: #fff9ef;
+    margin: 0;
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid #dbe5df;
+    background: #ffffff;
 }
 
 .misa-workflow-pinned--center {
-    width: min(760px, calc(100vw - 84px));
+    width: min(860px, calc(100vw - 40px));
     margin: 0;
-    box-shadow: 0 8px 24px rgba(36, 49, 66, 0.1);
+    box-shadow: 0 10px 22px rgba(17, 43, 31, 0.06);
 }
 
 .misa-workflow-pinned h4 {
     margin: 0;
-    font-family: 'DM Serif Display', Georgia, serif;
-    font-size: 1rem;
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 1.06rem;
 }
 
 .misa-workflow-pinned p {
     margin: 6px 0 10px;
     color: var(--misa-soft-ink);
-    font-size: 0.84rem;
+    font-size: 0.82rem;
 }
 
 .misa-header-brand {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 6px;
+    font-weight: 700;
+    font-size: 1.04rem;
+    color: #4f5cc8;
 }
 
 .misa-header-brand img:first-child {
-    width: 30px;
-}
-
-.misa-header-brand img:last-child {
-    width: 78px;
+    width: 18px;
+    height: 18px;
 }
 
 .misa-header-actions {
     display: inline-flex;
-    gap: 8px;
+    gap: 7px;
 }
 
 .misa-header-actions button {
-    min-width: 34px;
-    height: 34px;
-    padding: 0 9px;
-    border-radius: 10px;
-    border: 1px solid #d8d2c8;
-    background: #fff;
-    color: #2b3a4f;
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid #cfe0d7;
+    background: #ffffff;
+    color: #3a5148;
     cursor: pointer;
     font-weight: 700;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
+}
+
+.misa-icon-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.misa-action-icon {
+    width: 13px;
+    height: 13px;
+    opacity: 0.92;
 }
 
 .misa-chat-body {
     overflow: auto;
-    padding: 18px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    background:
-        linear-gradient(180deg, rgba(244, 238, 229, 0.52) 0%, rgba(238, 246, 247, 0.34) 100%),
-        repeating-linear-gradient(
-            0deg,
-            transparent,
-            transparent 32px,
-            rgba(32, 70, 89, 0.04) 33px,
-            transparent 34px
-        );
+    gap: 10px;
+    background: #ffffff;
 }
 
 .misa-welcome {
-    background: #fffefa;
-    border: 1px solid #d8d0c1;
-    border-radius: 18px;
+    background: #ffffff;
+    border: 1px solid #dce5df;
+    border-radius: 12px;
     padding: 18px;
 }
 
 .misa-welcome h3 {
     margin: 0;
-    font-family: 'DM Serif Display', Georgia, serif;
+    font-family: 'Source Serif 4', Georgia, serif;
 }
 
 .misa-welcome h3 em {
@@ -336,17 +345,17 @@ a,
     width: 100%;
     text-align: left;
     margin-top: 10px;
-    border: 1px solid #d6d0c5;
+    border: 1px solid #d6e3dd;
     background: #ffffff;
-    border-radius: 14px;
+    border-radius: 10px;
     padding: 12px 14px;
-    color: #34465d;
+    color: #30463d;
     cursor: pointer;
     transition: background-color 0.2s ease;
 }
 
 .misa-prompt:hover {
-    background: #edf5f5;
+    background: #eef7f2;
 }
 
 .misa-message {
@@ -361,44 +370,51 @@ a,
     justify-content: flex-start;
 }
 
+.misa-message--assistant > * {
+    width: 100%;
+}
+
 .misa-bubble {
-    max-width: 84%;
-    border-radius: 16px;
-    padding: 12px 14px;
+    max-width: 86%;
+    border-radius: 10px;
+    padding: 10px 12px;
     line-height: 1.45;
     white-space: normal;
-    box-shadow: 0 2px 8px rgba(34, 53, 70, 0.08);
+    box-shadow: 0 1px 4px rgba(25, 43, 34, 0.08);
+    font-size: 0.82rem;
 }
 
 .misa-message--user .misa-bubble {
     background: var(--misa-user-bubble);
     color: #ffffff;
+    border-radius: 12px;
 }
 
 .misa-message--assistant .misa-bubble {
     background: var(--misa-assistant-bubble);
-    color: #1f2d3a;
+    color: #21332c;
 }
 
 .misa-recommendation-card {
-    width: min(100%, 1060px);
-    background: #ffffff;
-    border: 1px solid #d7d1c6;
-    border-radius: 16px;
+    width: 100%;
+    background: #f5f8f6;
+    border: 1px solid #e1e8e3;
+    border-radius: 10px;
     padding: 14px;
-    box-shadow: 0 4px 14px rgba(36, 49, 66, 0.08);
+    box-shadow: none;
 }
 
 .misa-recommendation-card h4 {
     margin: 0 0 10px;
-    font-family: 'DM Serif Display', Georgia, serif;
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 0.95rem;
 }
 
 .misa-table-wrap {
-    max-height: 250px;
+    max-height: 320px;
     overflow: auto;
-    border: 1px solid #d7d1c6;
-    border-radius: 10px;
+    border: 1px solid #dbe5df;
+    border-radius: 8px;
 }
 
 .misa-table-wrap.is-expanded {
@@ -407,78 +423,120 @@ a,
 
 .misa-table-wrap table {
     margin: 0;
-    font-size: 0.9rem;
+    font-size: 0.76rem;
 }
 
 .misa-table-wrap thead th {
     position: sticky;
     top: 0;
-    background: #f4f7f8;
+    background: var(--misa-brand-header);
+    color: #f7fffb;
     z-index: 1;
+    font-weight: 700;
+    border-color: #245448;
+}
+
+.misa-table-wrap tbody td {
+    border-color: #e2e9e5;
+    color: #2a3e36;
+    font-weight: 500;
+}
+
+.misa-table-wrap tbody tr:nth-child(even) td {
+    background: #f8faf9;
 }
 
 .misa-result-notes {
-    margin: 12px 0 0;
-    padding-left: 16px;
-    color: #223345;
+    margin: 10px 0 0;
+    padding-left: 0;
+    list-style: none;
+    color: #364c43;
+    font-size: 0.77rem;
+    line-height: 1.45;
+}
+
+.misa-result-notes li::before {
+    content: ">";
+    color: #926f00;
+    margin-right: 6px;
 }
 
 .misa-supporting-note,
 .misa-source-note {
-    margin: 10px 0 0;
-    color: #4d5f75;
-    font-size: 0.88rem;
+    margin: 8px 0 0;
+    color: #576b61;
+    font-size: 0.76rem;
 }
 
 .misa-agent-runtime {
     display: flex;
-    gap: 8px;
+    gap: 7px;
     flex-wrap: wrap;
+    padding: 4px 2px 2px;
 }
 
 .misa-composer {
     display: grid;
     grid-template-columns: 1fr auto;
-    gap: 10px;
-    padding: 12px 14px;
+    gap: 8px;
+    padding: 8px 10px;
     border-top: 1px solid var(--misa-line);
-    background: #fffdf9;
+    background: #ffffff;
 }
 
 .misa-composer input {
-    border-radius: 999px;
-    border: 1px solid #cbc3b6;
-    padding: 11px 14px;
+    border-radius: 8px;
+    border: 1px solid #d6e2dc;
+    padding: 10px 12px;
     outline: none;
-    font-size: 0.94rem;
+    font-size: 0.82rem;
+    color: #2b3f36;
+}
+
+.misa-composer input::placeholder {
+    color: #9aa8a1;
 }
 
 .misa-composer input:focus {
-    border-color: var(--misa-brand);
-    box-shadow: 0 0 0 2px rgba(11, 111, 102, 0.2);
+    border-color: #9bcdb8;
+    box-shadow: 0 0 0 2px rgba(30, 154, 112, 0.16);
 }
 
 .misa-composer button {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
     border: none;
-    background: var(--misa-brand);
+    background: #85d8b5;
     color: #ffffff;
-    font-size: 1.1rem;
+    font-size: 0.9rem;
     cursor: pointer;
 }
 
 .misa-composer button:disabled {
-    background: #98a7a6;
+    background: #bfd6cb;
     cursor: not-allowed;
 }
 
 .misa-footer-note {
     margin: 0;
-    padding: 0 16px 14px;
-    font-size: 0.79rem;
-    color: #7e8793;
+    padding: 5px 12px 9px;
+    font-size: 0.66rem;
+    text-align: center;
+    color: #8f9894;
+}
+
+.misa-table-wrap thead th,
+.misa-table-wrap tbody td {
+    padding: 6px 8px;
+}
+
+.misa-table-wrap .table {
+    --bs-table-bg: transparent;
+    --bs-table-striped-bg: transparent;
+    --bs-table-striped-color: inherit;
+    --bs-table-border-color: #e2e9e5;
+    z-index: 1;
 }
 
 #blazor-error-ui {
@@ -515,12 +573,12 @@ a,
 
 @media (max-width: 900px) {
     .misa-workspace {
-        padding: 12px;
+        padding: 10px 10px 88px;
     }
 
     .misa-workflow-center-shell {
-        min-height: calc(100vh - 24px);
-        padding: 8px;
+        min-height: 170px;
+        padding: 6px;
     }
 
     .misa-workflow-pinned--center {
@@ -529,11 +587,28 @@ a,
 
     .misa-chat-panel,
     .misa-chat-panel--expanded {
-        inset: 12px 12px 74px 12px;
+        position: fixed;
+        inset: 12px 12px 70px 12px;
         width: auto;
         height: auto;
+        min-height: 0;
         max-height: none;
-        border-radius: 18px;
+        border-radius: 12px;
+    }
+
+    .misa-header-actions {
+        gap: 6px;
+    }
+
+    .misa-icon-button span {
+        display: none;
+    }
+
+    .misa-header-actions button {
+        width: 30px;
+        min-width: 30px;
+        padding: 0;
+        justify-content: center;
     }
 
     .misa-launcher {
@@ -542,7 +617,7 @@ a,
     }
 
     .misa-consent-screen {
-        padding: 22px 18px;
+        padding: 20px 16px;
     }
 
     .misa-bubble {
