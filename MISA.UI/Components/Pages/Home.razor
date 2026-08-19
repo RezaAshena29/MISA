@@ -1,0 +1,547 @@
+﻿@page "/"
+@implements IDisposable
+@using System.Text.Json
+@using MISA.UI.Services
+@inject MisaChatService ChatService
+
+<PageTitle>MISA Chat Assistant</PageTitle>
+
+<div class="misa-workspace">
+	<button type="button" class="misa-launcher" @onclick="OpenChatAsync">
+		<img src="images/misa-chatbot-sparkle.png" alt="" aria-hidden="true" />
+		<span>Chat With MISA Agents</span>
+	</button>
+
+	@if (IsLaunchAnimationVisible)
+	{
+		<div class="misa-launch-overlay">
+			<div class="misa-launch-card">
+				<h3>Starting agent workflow</h3>
+				<p>Connecting orchestration and MCP tools...</p>
+				<div class="misa-agent-strip">
+					@for (var i = 0; i < LauncherAgents.Length; i++)
+					{
+						<span class="misa-agent-chip @(i <= ActiveLaunchAgentIndex ? "is-active" : string.Empty)">@LauncherAgents[i]</span>
+					}
+				</div>
+			</div>
+		</div>
+	}
+
+	@if (IsChatOpen)
+	{
+		<section class="misa-chat-panel @(IsExpanded ? "misa-chat-panel--expanded" : string.Empty)">
+			@if (!IsConsentAccepted)
+			{
+				<div class="misa-consent-screen">
+					<div class="misa-consent-brand">
+						<img src="images/misa-chatbot-sparkle.png" alt="" aria-hidden="true" class="misa-consent-sparkle" />
+						<img src="images/misa-logo.png" alt="MISA" class="misa-consent-logo" />
+					</div>
+
+					<h2>Welcome to Manulife Illustrations Solution Assistant</h2>
+					<p>
+						AI models can make mistakes. Manulife reserves the right to correct any information shown in this tool.
+						All information provided is non-binding. Any insurance purchase is subject to completion of an
+						application and underwriting evaluation.
+					</p>
+					<p>
+						By continuing to use this chatbot, you acknowledge and accept these limitations.
+					</p>
+
+					<div class="misa-consent-actions">
+						<button type="button" class="btn-decline" @onclick="DeclineConsent">Decline</button>
+						<button type="button" class="btn-agree" @onclick="AcceptConsent">I agree</button>
+					</div>
+				</div>
+			}
+			else
+			{
+				<div class="misa-chat-header">
+					<div class="misa-header-brand">
+						<img src="images/misa-chatbot-sparkle.png" alt="" aria-hidden="true" />
+						<img src="images/misa-logo.png" alt="MISA" />
+					</div>
+					<div class="misa-header-actions">
+						<button type="button" title="New chat" @onclick="StartNewChat">New</button>
+						<button type="button" title="Expand" @onclick="ToggleExpand">@(IsExpanded ? "Fit" : "Max")</button>
+						<button type="button" title="Close" @onclick="CloseChat">Close</button>
+					</div>
+				</div>
+
+				<div class="misa-chat-body">
+					@if (Messages.Count == 0)
+					{
+						<div class="misa-welcome">
+							<h3>Hi <em>Local</em>, how can we help?</h3>
+							<p>Select your prompt for Manulife PAR products:</p>
+							<button type="button" class="misa-prompt" @onclick="() => SendPresetAsync(PromptOne)">
+								@PromptOne
+							</button>
+							<button type="button" class="misa-prompt" @onclick="() => SendPresetAsync(PromptTwo)">
+								@PromptTwo
+							</button>
+						</div>
+					}
+					else
+					{
+						@foreach (var message in Messages)
+						{
+							<div class="misa-message misa-message--@message.Role">
+								@if (message.Role == "assistant" && message.Recommendation is not null)
+								{
+									<article class="misa-recommendation-card">
+										<h4>@message.Recommendation.Title</h4>
+										<div class="misa-table-wrap @(IsExpanded ? "is-expanded" : string.Empty)">
+											<table class="table table-sm table-bordered align-middle mb-0">
+												<thead>
+													<tr>
+														@foreach (var header in message.Recommendation.Headers)
+														{
+															<th>@header</th>
+														}
+													</tr>
+												</thead>
+												<tbody>
+													@foreach (var row in message.Recommendation.Rows)
+													{
+														<tr>
+															@foreach (var cell in row)
+															{
+																<td>@cell</td>
+															}
+														</tr>
+													}
+												</tbody>
+											</table>
+										</div>
+
+										@if (message.Recommendation.Notes.Count > 0)
+										{
+											<ul class="misa-result-notes">
+												@foreach (var note in message.Recommendation.Notes)
+												{
+													<li>@note</li>
+												}
+											</ul>
+										}
+
+										@if (!string.IsNullOrWhiteSpace(message.Recommendation.SupportingNote))
+										{
+											<p class="misa-supporting-note">@message.Recommendation.SupportingNote</p>
+										}
+										@if (!string.IsNullOrWhiteSpace(message.Recommendation.Source))
+										{
+											<p class="misa-source-note">@message.Recommendation.Source</p>
+										}
+									</article>
+								}
+								else
+								{
+									<div class="misa-bubble">@((MarkupString)RenderText(message.Text))</div>
+								}
+							</div>
+						}
+					}
+
+					@if (IsProcessing)
+					{
+						<div class="misa-agent-runtime">
+							@for (var i = 0; i < RuntimeAgents.Length; i++)
+							{
+								<span class="misa-agent-chip @(i <= ActiveRuntimeAgentIndex ? "is-active" : string.Empty)">@RuntimeAgents[i]</span>
+							}
+						</div>
+					}
+				</div>
+
+				<form class="misa-composer" @onsubmit="HandleSubmitAsync" @onsubmit:preventDefault="true">
+					<input
+						type="text"
+						@bind="InputText"
+						@bind:event="oninput"
+						placeholder="Ask your underwriting question for quick guidance"
+						disabled="@IsProcessing" />
+					<button type="submit" disabled="@IsSendDisabled">Go</button>
+				</form>
+
+				<p class="misa-footer-note">Responses are generated by AI, which can make mistakes.</p>
+			}
+		</section>
+	}
+</div>
+
+@code {
+	private const string PromptOne = "My client is 45, male, non-smoker, $100K annual budget. How can we maximize the policy IRR at life expectancy?";
+	private const string PromptTwo = "What strategies can we implement to optimize the policy's internal rate of return (IRR) at his life expectancy?";
+
+	private static readonly string[] LauncherAgents =
+	[
+		"Intent Analyzer",
+		"Context Memory",
+		"MCP Coordinator",
+		"Decisioning Tool"
+	];
+
+	private static readonly string[] RuntimeAgents =
+	[
+		"Intent Analyzer",
+		"MCP Coordinator",
+		"Tool Execution",
+		"Response Composer"
+	];
+
+	private readonly List<ChatMessage> Messages = [];
+
+	private bool IsChatOpen;
+	private bool IsExpanded;
+	private bool IsConsentAccepted;
+	private bool IsLaunchAnimationVisible;
+	private bool IsProcessing;
+	private int ActiveLaunchAgentIndex = -1;
+	private int ActiveRuntimeAgentIndex = -1;
+	private string InputText = string.Empty;
+	private string SessionId = NewSessionId();
+	private CancellationTokenSource? StreamCts;
+
+	private bool IsSendDisabled => IsProcessing || string.IsNullOrWhiteSpace(InputText);
+
+	public void Dispose()
+	{
+		CancelStream();
+	}
+
+	private async Task OpenChatAsync()
+	{
+		if (IsLaunchAnimationVisible || IsChatOpen)
+		{
+			return;
+		}
+
+		IsLaunchAnimationVisible = true;
+		ActiveLaunchAgentIndex = -1;
+		await InvokeAsync(StateHasChanged);
+
+		for (var i = 0; i < LauncherAgents.Length; i++)
+		{
+			ActiveLaunchAgentIndex = i;
+			await InvokeAsync(StateHasChanged);
+			await Task.Delay(280);
+		}
+
+		await Task.Delay(200);
+		IsLaunchAnimationVisible = false;
+		ActiveLaunchAgentIndex = -1;
+		IsChatOpen = true;
+		IsExpanded = false;
+		IsConsentAccepted = false;
+		StartNewChat();
+		await InvokeAsync(StateHasChanged);
+	}
+
+	private void AcceptConsent()
+	{
+		IsConsentAccepted = true;
+	}
+
+	private void DeclineConsent()
+	{
+		CloseChat();
+	}
+
+	private void CloseChat()
+	{
+		CancelStream();
+		IsProcessing = false;
+		IsExpanded = false;
+		IsConsentAccepted = false;
+		IsChatOpen = false;
+		ActiveRuntimeAgentIndex = -1;
+	}
+
+	private void ToggleExpand()
+	{
+		IsExpanded = !IsExpanded;
+	}
+
+	private void StartNewChat()
+	{
+		CancelStream();
+		Messages.Clear();
+		InputText = string.Empty;
+		SessionId = NewSessionId();
+		ActiveRuntimeAgentIndex = -1;
+	}
+
+	private async Task HandleSubmitAsync()
+	{
+		var message = InputText.Trim();
+		InputText = string.Empty;
+		await SendMessageAsync(message);
+	}
+
+	private async Task SendPresetAsync(string prompt)
+	{
+		await SendMessageAsync(prompt);
+	}
+
+	private async Task SendMessageAsync(string message)
+	{
+		if (string.IsNullOrWhiteSpace(message) || IsProcessing)
+		{
+			return;
+		}
+
+		Messages.Add(ChatMessage.User(message));
+		IsProcessing = true;
+		ActiveRuntimeAgentIndex = 0;
+		await InvokeAsync(StateHasChanged);
+
+		string? resultText = null;
+		string? clarificationText = null;
+		string? errorText = null;
+
+		CancelStream();
+		StreamCts = new CancellationTokenSource();
+
+		try
+		{
+			await ChatService.StreamChatAsync(
+				new ChatRequestPayload(Message: message, SessionId: SessionId),
+				async streamEvent =>
+				{
+					var type = streamEvent.Type.ToLowerInvariant();
+
+					switch (type)
+					{
+						case "thinking":
+							ActiveRuntimeAgentIndex = Math.Max(ActiveRuntimeAgentIndex, 0);
+							break;
+						case "progress":
+						case "assumptions":
+						case "prevalidation":
+							ActiveRuntimeAgentIndex = Math.Max(ActiveRuntimeAgentIndex, 1);
+							break;
+						case "columns":
+							ActiveRuntimeAgentIndex = Math.Max(ActiveRuntimeAgentIndex, 2);
+							break;
+						case "result":
+							resultText = streamEvent.TextContent;
+							ActiveRuntimeAgentIndex = 3;
+							break;
+						case "clarification":
+						case "question":
+							clarificationText = streamEvent.TextContent;
+							ActiveRuntimeAgentIndex = 3;
+							break;
+						case "error":
+							errorText = streamEvent.TextContent;
+							ActiveRuntimeAgentIndex = 3;
+							break;
+					}
+
+					await InvokeAsync(StateHasChanged);
+				},
+				StreamCts.Token);
+		}
+		catch (Exception ex)
+		{
+			errorText = $"Unable to reach chat service. {ex.Message}";
+		}
+
+		if (!string.IsNullOrWhiteSpace(resultText))
+		{
+			if (TryParseRecommendation(resultText, out var tableData))
+			{
+				Messages.Add(ChatMessage.AssistantRecommendation(resultText, tableData));
+			}
+			else
+			{
+				Messages.Add(ChatMessage.Assistant(resultText));
+			}
+		}
+		else if (!string.IsNullOrWhiteSpace(clarificationText))
+		{
+			Messages.Add(ChatMessage.Assistant(clarificationText));
+		}
+		else if (!string.IsNullOrWhiteSpace(errorText))
+		{
+			Messages.Add(ChatMessage.Assistant($"Error: {errorText}"));
+		}
+		else
+		{
+			Messages.Add(ChatMessage.Assistant("No response was returned by the MISA service."));
+		}
+
+		IsProcessing = false;
+		ActiveRuntimeAgentIndex = -1;
+		await InvokeAsync(StateHasChanged);
+	}
+
+	private void CancelStream()
+	{
+		if (StreamCts is null)
+		{
+			return;
+		}
+
+		try
+		{
+			StreamCts.Cancel();
+		}
+		catch (ObjectDisposedException)
+		{
+			// Ignore cancellation race during disposal.
+		}
+
+		StreamCts.Dispose();
+		StreamCts = null;
+	}
+
+	private static bool TryParseRecommendation(string markdown, out RecommendationTableData result)
+	{
+		result = default!;
+		if (string.IsNullOrWhiteSpace(markdown))
+		{
+			return false;
+		}
+
+		var lines = markdown.Replace("\r", string.Empty).Split('\n');
+		var normalizedLines = lines.Select(line => line.TrimEnd()).ToList();
+		var title = normalizedLines.FirstOrDefault(line => line.StartsWith("**", StringComparison.Ordinal) && line.EndsWith("**", StringComparison.Ordinal));
+		title = string.IsNullOrWhiteSpace(title)
+			? "Recommendation"
+			: title.Trim('*').Trim();
+
+		var tableStart = -1;
+		for (var i = 0; i < normalizedLines.Count - 1; i++)
+		{
+			var current = normalizedLines[i].TrimStart();
+			var next = normalizedLines[i + 1].TrimStart();
+			if (current.StartsWith("|", StringComparison.Ordinal)
+				&& next.StartsWith("|", StringComparison.Ordinal)
+				&& next.Contains("---", StringComparison.Ordinal))
+			{
+				tableStart = i;
+				break;
+			}
+		}
+
+		if (tableStart < 0)
+		{
+			return false;
+		}
+
+		var headers = ParseTableRow(normalizedLines[tableStart]);
+		if (headers.Count == 0)
+		{
+			return false;
+		}
+
+		var rows = new List<IReadOnlyList<string>>();
+		var cursor = tableStart + 2;
+		while (cursor < normalizedLines.Count && normalizedLines[cursor].TrimStart().StartsWith("|", StringComparison.Ordinal))
+		{
+			var row = ParseTableRow(normalizedLines[cursor]);
+			if (row.Count > 0)
+			{
+				rows.Add(row);
+			}
+			cursor++;
+		}
+
+		var notes = new List<string>();
+		string? supportingNote = null;
+		string? source = null;
+
+		while (cursor < normalizedLines.Count)
+		{
+			var line = normalizedLines[cursor].Trim();
+			cursor++;
+
+			if (string.IsNullOrWhiteSpace(line))
+			{
+				continue;
+			}
+
+			if (line.StartsWith("- ", StringComparison.Ordinal))
+			{
+				notes.Add(line[2..].Trim());
+				continue;
+			}
+
+			if (line.StartsWith("Supporting note:", StringComparison.OrdinalIgnoreCase))
+			{
+				supportingNote = line;
+				continue;
+			}
+
+			if (line.StartsWith("Source:", StringComparison.OrdinalIgnoreCase))
+			{
+				source = line;
+				continue;
+			}
+
+			if (line.StartsWith("_", StringComparison.Ordinal) && line.EndsWith("_", StringComparison.Ordinal) && line.Length > 2)
+			{
+				notes.Add(line.Trim('_').Trim());
+			}
+		}
+
+		result = new RecommendationTableData(
+			Title: title,
+			Headers: headers,
+			Rows: rows,
+			Notes: notes,
+			SupportingNote: supportingNote,
+			Source: source);
+
+		return true;
+	}
+
+	private static IReadOnlyList<string> ParseTableRow(string row)
+	{
+		var parts = row.Split('|', StringSplitOptions.None);
+		if (parts.Length < 3)
+		{
+			return [];
+		}
+
+		var cells = new List<string>(parts.Length - 2);
+		for (var index = 1; index < parts.Length - 1; index++)
+		{
+			cells.Add(parts[index].Trim().Replace("\\|", "|", StringComparison.Ordinal));
+		}
+
+		return cells;
+	}
+
+	private static string RenderText(string text)
+	{
+		var encoded = System.Net.WebUtility.HtmlEncode(text);
+		return encoded.Replace("\n", "<br />", StringComparison.Ordinal);
+	}
+
+	private static string NewSessionId()
+	{
+		return $"misa-{Guid.NewGuid():N}";
+	}
+
+	private sealed record ChatMessage(string Role, string Text, RecommendationTableData? Recommendation)
+	{
+		public static ChatMessage User(string text) => new("user", text, null);
+
+		public static ChatMessage Assistant(string text) => new("assistant", text, null);
+
+		public static ChatMessage AssistantRecommendation(string text, RecommendationTableData recommendation)
+			=> new("assistant", text, recommendation);
+	}
+
+	private sealed record RecommendationTableData(
+		string Title,
+		IReadOnlyList<string> Headers,
+		IReadOnlyList<IReadOnlyList<string>> Rows,
+		IReadOnlyList<string> Notes,
+		string? SupportingNote,
+		string? Source);
+}

@@ -1,0 +1,504 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap');
+
+:root {
+    --misa-ink: #19202a;
+    --misa-soft-ink: #4f5d73;
+    --misa-brand: #0b6f66;
+    --misa-brand-deep: #09514b;
+    --misa-accent: #f2b705;
+    --misa-wash: #f6f2eb;
+    --misa-panel: #fffdf9;
+    --misa-line: #d7d2c9;
+    --misa-user-bubble: #123553;
+    --misa-assistant-bubble: #e9f3f4;
+    --misa-shadow: 0 20px 50px rgba(21, 34, 56, 0.18);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    min-height: 100%;
+    font-family: 'IBM Plex Sans', 'Segoe UI', Tahoma, sans-serif;
+    color: var(--misa-ink);
+    background:
+        radial-gradient(circle at 82% -5%, rgba(11, 111, 102, 0.22), transparent 36%),
+        radial-gradient(circle at 8% 95%, rgba(242, 183, 5, 0.2), transparent 34%),
+        linear-gradient(135deg, #f3eee5 0%, #e8f2f4 48%, #f6f0e8 100%);
+}
+
+a,
+.btn-link {
+    color: var(--misa-brand);
+}
+
+.misa-workspace {
+    min-height: 100vh;
+    padding: 28px;
+    position: relative;
+}
+
+.misa-launcher {
+    position: fixed;
+    right: 28px;
+    bottom: 28px;
+    border: 0;
+    border-radius: 999px;
+    background: linear-gradient(120deg, var(--misa-brand), var(--misa-brand-deep));
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 0.92rem;
+    letter-spacing: 0.02em;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px 12px 12px;
+    box-shadow: var(--misa-shadow);
+    cursor: pointer;
+    z-index: 14;
+}
+
+.misa-launcher img {
+    width: 34px;
+    height: 34px;
+}
+
+.misa-launch-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(17, 29, 43, 0.45);
+    backdrop-filter: blur(4px);
+    display: grid;
+    place-items: center;
+    z-index: 12;
+}
+
+.misa-launch-card {
+    width: min(560px, calc(100vw - 42px));
+    padding: 26px;
+    border-radius: 24px;
+    background: #fdf8f0;
+    border: 1px solid var(--misa-line);
+    box-shadow: var(--misa-shadow);
+}
+
+.misa-launch-card h3 {
+    margin: 0;
+    font-size: 1.35rem;
+    font-family: 'DM Serif Display', Georgia, serif;
+}
+
+.misa-launch-card p {
+    margin: 10px 0 18px;
+    color: var(--misa-soft-ink);
+}
+
+.misa-agent-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.misa-agent-chip {
+    border-radius: 999px;
+    border: 1px solid #9ab5b1;
+    padding: 7px 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    background: #edf3f3;
+    color: #3d4f62;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.misa-agent-chip.is-active {
+    background: var(--misa-brand);
+    color: #ffffff;
+    border-color: var(--misa-brand);
+    transform: translateY(-2px);
+}
+
+.misa-chat-panel {
+    position: fixed;
+    right: 28px;
+    bottom: 88px;
+    width: min(540px, calc(100vw - 28px));
+    max-height: calc(100vh - 118px);
+    height: 760px;
+    display: grid;
+    grid-template-rows: auto 1fr auto auto;
+    border-radius: 24px;
+    border: 1px solid var(--misa-line);
+    background: var(--misa-panel);
+    box-shadow: var(--misa-shadow);
+    overflow: hidden;
+    z-index: 13;
+    transform-origin: bottom right;
+    animation: misaPanelIn 0.24s ease;
+}
+
+.misa-chat-panel--expanded {
+    width: min(1150px, calc(100vw - 34px));
+    height: min(88vh, 900px);
+    right: 18px;
+    bottom: 18px;
+}
+
+.misa-consent-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 34px 32px;
+    gap: 14px;
+    overflow: auto;
+}
+
+.misa-consent-brand {
+    position: relative;
+    margin-top: 8px;
+}
+
+.misa-consent-sparkle {
+    position: absolute;
+    width: 106px;
+    left: -40px;
+    top: -10px;
+}
+
+.misa-consent-logo {
+    width: 112px;
+}
+
+.misa-consent-screen h2 {
+    margin: 12px 0 2px;
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 1.42rem;
+    line-height: 1.25;
+    color: #0f1e34;
+}
+
+.misa-consent-screen p {
+    margin: 0;
+    color: var(--misa-soft-ink);
+    line-height: 1.55;
+    font-size: 0.95rem;
+}
+
+.misa-consent-actions {
+    display: flex;
+    gap: 14px;
+    margin-top: 12px;
+}
+
+.misa-consent-actions button {
+    min-width: 128px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    padding: 10px 16px;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.btn-decline {
+    border-color: #c7bfaf;
+    background: #fff9ef;
+    color: #51473a;
+}
+
+.btn-agree {
+    background: linear-gradient(120deg, var(--misa-brand), var(--misa-brand-deep));
+    color: #fff;
+}
+
+.misa-chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--misa-line);
+    background: linear-gradient(180deg, #ffffff 0%, #f7f2e9 100%);
+}
+
+.misa-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.misa-header-brand img:first-child {
+    width: 30px;
+}
+
+.misa-header-brand img:last-child {
+    width: 78px;
+}
+
+.misa-header-actions {
+    display: inline-flex;
+    gap: 8px;
+}
+
+.misa-header-actions button {
+    min-width: 34px;
+    height: 34px;
+    padding: 0 9px;
+    border-radius: 10px;
+    border: 1px solid #d8d2c8;
+    background: #fff;
+    color: #2b3a4f;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.72rem;
+}
+
+.misa-chat-body {
+    overflow: auto;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background:
+        linear-gradient(180deg, rgba(244, 238, 229, 0.52) 0%, rgba(238, 246, 247, 0.34) 100%),
+        repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 32px,
+            rgba(32, 70, 89, 0.04) 33px,
+            transparent 34px
+        );
+}
+
+.misa-welcome {
+    background: #fffefa;
+    border: 1px solid #d8d0c1;
+    border-radius: 18px;
+    padding: 18px;
+}
+
+.misa-welcome h3 {
+    margin: 0;
+    font-family: 'DM Serif Display', Georgia, serif;
+}
+
+.misa-welcome h3 em {
+    font-style: italic;
+    color: #0f7f73;
+}
+
+.misa-welcome p {
+    margin: 10px 0 14px;
+    color: var(--misa-soft-ink);
+}
+
+.misa-prompt {
+    width: 100%;
+    text-align: left;
+    margin-top: 10px;
+    border: 1px solid #d6d0c5;
+    background: #ffffff;
+    border-radius: 14px;
+    padding: 12px 14px;
+    color: #34465d;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.misa-prompt:hover {
+    background: #edf5f5;
+}
+
+.misa-message {
+    display: flex;
+}
+
+.misa-message--user {
+    justify-content: flex-end;
+}
+
+.misa-message--assistant {
+    justify-content: flex-start;
+}
+
+.misa-bubble {
+    max-width: 84%;
+    border-radius: 16px;
+    padding: 12px 14px;
+    line-height: 1.45;
+    white-space: normal;
+    box-shadow: 0 2px 8px rgba(34, 53, 70, 0.08);
+}
+
+.misa-message--user .misa-bubble {
+    background: var(--misa-user-bubble);
+    color: #ffffff;
+}
+
+.misa-message--assistant .misa-bubble {
+    background: var(--misa-assistant-bubble);
+    color: #1f2d3a;
+}
+
+.misa-recommendation-card {
+    width: min(100%, 1060px);
+    background: #ffffff;
+    border: 1px solid #d7d1c6;
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow: 0 4px 14px rgba(36, 49, 66, 0.08);
+}
+
+.misa-recommendation-card h4 {
+    margin: 0 0 10px;
+    font-family: 'DM Serif Display', Georgia, serif;
+}
+
+.misa-table-wrap {
+    max-height: 250px;
+    overflow: auto;
+    border: 1px solid #d7d1c6;
+    border-radius: 10px;
+}
+
+.misa-table-wrap.is-expanded {
+    max-height: 560px;
+}
+
+.misa-table-wrap table {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.misa-table-wrap thead th {
+    position: sticky;
+    top: 0;
+    background: #f4f7f8;
+    z-index: 1;
+}
+
+.misa-result-notes {
+    margin: 12px 0 0;
+    padding-left: 16px;
+    color: #223345;
+}
+
+.misa-supporting-note,
+.misa-source-note {
+    margin: 10px 0 0;
+    color: #4d5f75;
+    font-size: 0.88rem;
+}
+
+.misa-agent-runtime {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.misa-composer {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    padding: 12px 14px;
+    border-top: 1px solid var(--misa-line);
+    background: #fffdf9;
+}
+
+.misa-composer input {
+    border-radius: 999px;
+    border: 1px solid #cbc3b6;
+    padding: 11px 14px;
+    outline: none;
+    font-size: 0.94rem;
+}
+
+.misa-composer input:focus {
+    border-color: var(--misa-brand);
+    box-shadow: 0 0 0 2px rgba(11, 111, 102, 0.2);
+}
+
+.misa-composer button {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: none;
+    background: var(--misa-brand);
+    color: #ffffff;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.misa-composer button:disabled {
+    background: #98a7a6;
+    cursor: not-allowed;
+}
+
+.misa-footer-note {
+    margin: 0;
+    padding: 0 16px 14px;
+    font-size: 0.79rem;
+    color: #7e8793;
+}
+
+#blazor-error-ui {
+    background: #b32121;
+    color: white;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}
+
+@keyframes misaPanelIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+@media (max-width: 900px) {
+    .misa-workspace {
+        padding: 12px;
+    }
+
+    .misa-chat-panel,
+    .misa-chat-panel--expanded {
+        inset: 12px 12px 74px 12px;
+        width: auto;
+        height: auto;
+        max-height: none;
+        border-radius: 18px;
+    }
+
+    .misa-launcher {
+        right: 12px;
+        bottom: 12px;
+    }
+
+    .misa-consent-screen {
+        padding: 22px 18px;
+    }
+
+    .misa-bubble {
+        max-width: 96%;
+    }
+}
