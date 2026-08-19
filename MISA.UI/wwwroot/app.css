@@ -38,7 +38,7 @@ a,
 }
 
 .misa-workflow-center-shell {
-    min-height: 220px;
+    min-height: 340px;
     display: grid;
     place-items: center;
     padding: 8px 20px 18px;
@@ -85,7 +85,9 @@ a,
 }
 
 .misa-launch-card {
-    width: min(560px, calc(100vw - 42px));
+    width: min(1380px, calc(100vw - 42px));
+    max-height: calc(100vh - 44px);
+    overflow: auto;
     padding: 24px;
     border-radius: 14px;
     background: #ffffff;
@@ -99,34 +101,135 @@ a,
     font-family: 'Source Serif 4', Georgia, serif;
 }
 
-.misa-launch-card p {
+.misa-launch-card > p {
     margin: 10px 0 18px;
     color: var(--misa-soft-ink);
 }
 
-.misa-agent-strip {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+.misa-flow-viewport {
+    overflow: visible;
+    padding-bottom: 2px;
 }
 
-.misa-agent-chip {
+.misa-flow-track {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    align-items: stretch;
+    gap: 10px;
+    min-width: 0;
+    padding: 2px 2px 8px;
+}
+
+.misa-flow-track--compact {
+    grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
+}
+
+.misa-flow-track--compact .misa-flow-node {
+    width: auto;
+    min-height: 84px;
+    padding: 10px;
+}
+
+.misa-flow-track--compact .misa-flow-node p {
+    display: none;
+}
+
+.misa-flow-track--compact .misa-flow-link {
+    display: none;
+}
+
+.misa-flow-node {
+    width: auto;
+    min-height: 112px;
+    border-radius: 12px;
+    border: 1px solid #d6e3dc;
+    background: #f8fcfa;
+    padding: 12px;
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    gap: 6px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
+}
+
+.misa-flow-icon {
+    width: 32px;
+    height: 32px;
     border-radius: 999px;
-    border: 1px solid #cfdcd5;
-    padding: 6px 11px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-    background: #f3f7f5;
-    color: #5a6c63;
-    transition: transform 0.2s ease, background-color 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.67rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: #ffffff;
+    background: linear-gradient(130deg, #8aa299, #62776e);
+    box-shadow: 0 6px 12px rgba(26, 50, 40, 0.15);
 }
 
-.misa-agent-chip.is-active {
-    background: var(--misa-brand);
-    color: #ffffff;
-    border-color: var(--misa-brand);
+.misa-flow-node h5 {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.24;
+    color: #203228;
+}
+
+.misa-flow-node p {
+    margin: 0;
+    font-size: 0.71rem;
+    line-height: 1.3;
+    color: #5e7168;
+}
+
+.misa-flow-node.is-pending {
+    opacity: 0.86;
+}
+
+.misa-flow-node.is-complete {
+    border-color: #2e9d73;
+    background: #e6f7ee;
+}
+
+.misa-flow-node.is-complete .misa-flow-icon {
+    background: linear-gradient(120deg, #2aad75, #198860);
+}
+
+.misa-flow-node.is-complete h5 {
+    color: #165039;
+}
+
+.misa-flow-node.is-current {
+    border-color: #d78422;
+    background: #fff2de;
     transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(164, 100, 19, 0.22);
+    animation: misaNodeShake 0.46s ease-in-out infinite;
+}
+
+.misa-flow-node.is-current .misa-flow-icon {
+    background: linear-gradient(120deg, #e69b2f, #ba6b12);
+}
+
+.misa-flow-link {
+    display: none;
+    width: 54px;
+    height: 4px;
+    border-radius: 999px;
+    background: #d5e1db;
+    align-self: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.misa-flow-link.is-active {
+    background: linear-gradient(90deg, #71c8a3, #1e9a70);
+}
+
+.misa-flow-link.is-active::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.78) 50%, rgba(255, 255, 255, 0) 100%);
+    animation: misaFlowSweep 1.1s linear infinite;
 }
 
 .misa-chat-panel {
@@ -250,7 +353,7 @@ a,
 }
 
 .misa-workflow-pinned--center {
-    width: min(860px, calc(100vw - 40px));
+    width: min(1380px, calc(100vw - 32px));
     margin: 0;
     box-shadow: 0 10px 22px rgba(17, 43, 31, 0.06);
 }
@@ -261,7 +364,7 @@ a,
     font-size: 1.06rem;
 }
 
-.misa-workflow-pinned p {
+.misa-workflow-pinned > p {
     margin: 6px 0 10px;
     color: var(--misa-soft-ink);
     font-size: 0.82rem;
@@ -468,11 +571,13 @@ a,
     font-size: 0.76rem;
 }
 
-.misa-agent-runtime {
-    display: flex;
-    gap: 7px;
-    flex-wrap: wrap;
-    padding: 4px 2px 2px;
+.misa-agent-runtime-note {
+    border: 1px dashed #cad9d1;
+    border-radius: 8px;
+    background: #f8fbf9;
+    color: #5b6f65;
+    font-size: 0.74rem;
+    padding: 8px 10px;
 }
 
 .misa-composer {
@@ -571,18 +676,93 @@ a,
     }
 }
 
+@keyframes misaFlowSweep {
+    from {
+        transform: translateX(-100%);
+    }
+
+    to {
+        transform: translateX(100%);
+    }
+}
+
+@keyframes misaNodeShake {
+    0% {
+        transform: translateX(0) rotate(0deg);
+    }
+
+    20% {
+        transform: translateX(-1.5px) rotate(-0.5deg);
+    }
+
+    40% {
+        transform: translateX(1.5px) rotate(0.5deg);
+    }
+
+    60% {
+        transform: translateX(-1px) rotate(-0.35deg);
+    }
+
+    80% {
+        transform: translateX(1px) rotate(0.35deg);
+    }
+
+    100% {
+        transform: translateX(0) rotate(0deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .misa-flow-node,
+    .misa-flow-node.is-current,
+    .misa-flow-link,
+    .misa-flow-link.is-active::after {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+
 @media (max-width: 900px) {
     .misa-workspace {
         padding: 10px 10px 88px;
     }
 
     .misa-workflow-center-shell {
-        min-height: 170px;
+        min-height: 250px;
         padding: 6px;
     }
 
     .misa-workflow-pinned--center {
         width: calc(100vw - 32px);
+    }
+
+    .misa-flow-track {
+        grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+        gap: 8px;
+    }
+
+    .misa-flow-track--compact {
+        grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+    }
+
+    .misa-flow-node {
+        width: auto;
+        min-height: 94px;
+        padding: 9px;
+    }
+
+    .misa-flow-icon {
+        width: 24px;
+        height: 24px;
+        font-size: 0.58rem;
+    }
+
+    .misa-flow-node h5 {
+        font-size: 0.72rem;
+    }
+
+    .misa-flow-node p {
+        display: none;
     }
 
     .misa-chat-panel,

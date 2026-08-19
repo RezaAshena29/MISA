@@ -16,11 +16,22 @@
 		<div class="misa-workflow-pinned misa-workflow-pinned--center" role="status" aria-live="polite">
 			<h4>Starting agent workflow</h4>
 			<p>Workflow status stays visible for users during this session.</p>
-			<div class="misa-agent-strip">
-				@for (var i = 0; i < LauncherAgents.Length; i++)
-				{
-					<span class="misa-agent-chip @(i <= PersistentLaunchAgentIndex ? "is-active" : string.Empty)">@LauncherAgents[i]</span>
-				}
+			<div class="misa-flow-viewport">
+				<div class="misa-flow-track" role="list" aria-label="Backend orchestration workflow">
+					@for (var i = 0; i < OrchestrationAgents.Length; i++)
+					{
+						<article class="misa-flow-node @GetNodeStateClass(i, PersistentOrchestrationAgentIndex)" role="listitem">
+							<span class="misa-flow-icon" aria-hidden="true">@OrchestrationAgents[i].Icon</span>
+							<h5>@OrchestrationAgents[i].Title</h5>
+							<p>@OrchestrationAgents[i].Summary</p>
+						</article>
+
+						@if (i < OrchestrationAgents.Length - 1)
+						{
+							<span class="misa-flow-link @(IsFlowLinkActive(i, PersistentOrchestrationAgentIndex) ? "is-active" : string.Empty)" aria-hidden="true"></span>
+						}
+					}
+				</div>
 			</div>
 		</div>
 	</div>
@@ -31,11 +42,22 @@
 			<div class="misa-launch-card">
 				<h3>Starting agent workflow</h3>
 				<p>Connecting orchestration and MCP tools...</p>
-				<div class="misa-agent-strip">
-					@for (var i = 0; i < LauncherAgents.Length; i++)
-					{
-						<span class="misa-agent-chip @(i <= ActiveLaunchAgentIndex ? "is-active" : string.Empty)">@LauncherAgents[i]</span>
-					}
+				<div class="misa-flow-viewport">
+					<div class="misa-flow-track misa-flow-track--compact" role="list" aria-label="Launch workflow status">
+						@for (var i = 0; i < OrchestrationAgents.Length; i++)
+						{
+							<article class="misa-flow-node @GetNodeStateClass(i, ActiveLaunchAgentIndex)" role="listitem">
+								<span class="misa-flow-icon" aria-hidden="true">@OrchestrationAgents[i].Icon</span>
+								<h5>@OrchestrationAgents[i].Title</h5>
+								<p>@OrchestrationAgents[i].Summary</p>
+							</article>
+
+							@if (i < OrchestrationAgents.Length - 1)
+							{
+								<span class="misa-flow-link @(IsFlowLinkActive(i, ActiveLaunchAgentIndex) ? "is-active" : string.Empty)" aria-hidden="true"></span>
+							}
+						}
+					</div>
 				</div>
 			</div>
 		</div>
@@ -168,12 +190,7 @@
 
 					@if (IsProcessing)
 					{
-						<div class="misa-agent-runtime">
-							@for (var i = 0; i < RuntimeAgents.Length; i++)
-							{
-								<span class="misa-agent-chip @(i <= ActiveRuntimeAgentIndex ? "is-active" : string.Empty)">@RuntimeAgents[i]</span>
-							}
-						</div>
+						<div class="misa-agent-runtime-note">Agent workflow is active in the center panel.</div>
 					}
 				</div>
 
@@ -197,20 +214,19 @@
 	private const string PromptOne = "My client is 45, male, non-smoker, $100K annual budget. How can we maximize the policy IRR at life expectancy?";
 	private const string PromptTwo = "What strategies can we implement to optimize the policy's internal rate of return (IRR) at his life expectancy?";
 
-	private static readonly string[] LauncherAgents =
+	private static readonly AgentWorkflowNode[] OrchestrationAgents =
 	[
-		"Intent Analyzer",
-		"Context Memory",
-		"MCP Coordinator",
-		"Decisioning Tool"
-	];
-
-	private static readonly string[] RuntimeAgents =
-	[
-		"Intent Analyzer",
-		"MCP Coordinator",
-		"Tool Execution",
-		"Response Composer"
+		new("Orchestrator Agent", "OR", "Coordinates the end-to-end request flow."),
+		new("Intent Analyzer Agent", "IA", "Detects user intent and required calculations."),
+		new("Context Memory Agent", "CM", "Applies session context and prior constraints."),
+		new("Clarifier Agent", "CL", "Requests missing details when assumptions are risky."),
+		new("Illustration Planner Agent", "PL", "Builds the scenario and product planning path."),
+		new("Validation Guard Agent", "VG", "Checks business rules and input consistency."),
+		new("Fanout Dispatcher Agent", "FD", "Splits work to specialized calculation workers."),
+		new("Calc Worker Pool Agent", "CW", "Runs parallel premium and IRR computations."),
+		new("Fanin Aggregator Agent", "FA", "Merges worker outputs into a single view."),
+		new("Decision Ranker Agent", "DR", "Ranks alternatives against optimization goals."),
+		new("Response Composer Agent", "RC", "Composes the final user-facing recommendation.")
 	];
 
 	private readonly List<ChatMessage> Messages = [];
@@ -229,9 +245,11 @@
 	private bool IsDisposed;
 
 	private bool IsSendDisabled => IsProcessing || string.IsNullOrWhiteSpace(InputText);
-	private int PersistentLaunchAgentIndex => IsLaunchAnimationVisible
+	private int PersistentOrchestrationAgentIndex => IsLaunchAnimationVisible
 		? ActiveLaunchAgentIndex
-		: LauncherAgents.Length - 1;
+		: IsProcessing
+			? ActiveRuntimeAgentIndex
+			: OrchestrationAgents.Length - 1;
 
 	public void Dispose()
 	{
@@ -257,12 +275,12 @@
 
 		try
 		{
-			for (var i = 0; i < LauncherAgents.Length; i++)
+			for (var i = 0; i < OrchestrationAgents.Length; i++)
 			{
 				launchToken.ThrowIfCancellationRequested();
 				ActiveLaunchAgentIndex = i;
 				await RequestRenderAsync();
-				await Task.Delay(280, launchToken);
+				await Task.Delay(170, launchToken);
 			}
 
 			await Task.Delay(200, launchToken);
@@ -371,28 +389,28 @@
 					switch (type)
 					{
 						case "thinking":
-							ActiveRuntimeAgentIndex = Math.Max(ActiveRuntimeAgentIndex, 0);
+							ActiveRuntimeAgentIndex = Math.Max(ActiveRuntimeAgentIndex, 2);
 							break;
 						case "progress":
 						case "assumptions":
 						case "prevalidation":
-							ActiveRuntimeAgentIndex = Math.Max(ActiveRuntimeAgentIndex, 1);
+							ActiveRuntimeAgentIndex = Math.Max(ActiveRuntimeAgentIndex, 5);
 							break;
 						case "columns":
-							ActiveRuntimeAgentIndex = Math.Max(ActiveRuntimeAgentIndex, 2);
+							ActiveRuntimeAgentIndex = Math.Max(ActiveRuntimeAgentIndex, 8);
 							break;
 						case "result":
 							resultText = streamEvent.TextContent;
-							ActiveRuntimeAgentIndex = 3;
+							ActiveRuntimeAgentIndex = 10;
 							break;
 						case "clarification":
 						case "question":
 							clarificationText = streamEvent.TextContent;
-							ActiveRuntimeAgentIndex = 3;
+							ActiveRuntimeAgentIndex = 10;
 							break;
 						case "error":
 							errorText = streamEvent.TextContent;
-							ActiveRuntimeAgentIndex = 3;
+							ActiveRuntimeAgentIndex = 10;
 							break;
 					}
 
@@ -495,6 +513,31 @@
 		}
 
 		return InvokeAsync(StateHasChanged);
+	}
+
+	private static string GetNodeStateClass(int nodeIndex, int activeIndex)
+	{
+		if (activeIndex < 0)
+		{
+			return "is-pending";
+		}
+
+		if (nodeIndex < activeIndex)
+		{
+			return "is-complete";
+		}
+
+		if (nodeIndex == activeIndex)
+		{
+			return "is-current";
+		}
+
+		return "is-pending";
+	}
+
+	private static bool IsFlowLinkActive(int linkIndex, int activeIndex)
+	{
+		return activeIndex >= 0 && linkIndex < activeIndex;
 	}
 
 	private static bool TryParseRecommendation(string markdown, out RecommendationTableData result)
@@ -638,6 +681,8 @@
 	{
 		return $"misa-{Guid.NewGuid():N}";
 	}
+
+	private sealed record AgentWorkflowNode(string Title, string Icon, string Summary);
 
 	private sealed record ChatMessage(string Role, string Text, RecommendationTableData? Recommendation)
 	{
