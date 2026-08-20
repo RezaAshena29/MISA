@@ -10,3 +10,13 @@
 *.suo
 *.userosscache
 *.sln.docstates
+
+# Image assets
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
+*.bmp
+*.ico
