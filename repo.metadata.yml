@@ -1,0 +1,18 @@
+schema_version: "3.1.0"
+
+repository:
+  name: MISA_Agentic
+  retain_access: true
+  tags:
+    - retain-access
+    - active-repository
+    - scm-branch-strategy
+
+branching:
+  model: feature-master
+  feature_branch_pattern: "feature/*"
+  production_branch: master
+
+references:
+  metadata_template: "https://mfc.sharepoint.com/:u:/r/sites/GlobalEA/Shared%20Documents/GitHub%20Metadata%20Tagging%20Communication/repo.metadata.template.yml?d=w46b04160b456461587b2204595dd05ca&csf=1&web=1&e=jvVo8v"
+  branch_strategy: "https://github.com/mfc-ets/eng-architecture-ref/tree/main/patterns/scm-branch-strategy"
